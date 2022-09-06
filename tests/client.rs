@@ -1,23 +1,19 @@
 use std::env;
 use std::fs::File;
 use std::io::Write;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use futures::future::{self, Future};
-use futures::stream::{self, Stream};
 use jobslot::Client;
-use tokio_core::reactor::Core;
-use tokio_process::CommandExt;
+use tokio::process::Command;
 
 struct Test {
     name: &'static str,
-    f: &'static dyn Fn(),
+    f: &'static (dyn Fn() + Send + Sync),
     make_args: &'static [&'static str],
-    rule: &'static dyn Fn(&str) -> String,
+    rule: &'static (dyn Fn(&str) -> String + Send + Sync),
 }
 
 const TESTS: &[Test] = &[
@@ -100,7 +96,8 @@ const TESTS: &[Test] = &[
     },
 ];
 
-fn main() {
+#[tokio::main()]
+async fn main() {
     if let Ok(test) = env::var("TEST_TO_RUN") {
         return (TESTS.iter().find(|t| t.name == test).unwrap().f)();
     }
@@ -108,8 +105,6 @@ fn main() {
     let me = env::current_exe().unwrap();
     let me = me.to_str().unwrap();
     let filter = env::args().nth(1);
-
-    let mut core = Core::new().unwrap();
 
     let futures = TESTS
         .iter()
@@ -128,16 +123,18 @@ all:
                 test.name,
                 (test.rule)(me)
             );
+
             File::create(td.path().join("Makefile"))
                 .unwrap()
                 .write_all(makefile.as_bytes())
                 .unwrap();
+
             let prog = env::var("MAKE").unwrap_or_else(|_| "make".to_string());
             let mut cmd = Command::new(prog);
             cmd.args(test.make_args);
             cmd.current_dir(td.path());
-            future::lazy(move || {
-                cmd.output_async().map(move |e| {
+            tokio::spawn(async move {
+                cmd.output().await.map(move |e| {
                     drop(td);
                     (test, e)
                 })
@@ -147,19 +144,17 @@ all:
 
     println!("\nrunning {} tests\n", futures.len());
 
-    let stream = stream::iter(futures.into_iter().map(Ok)).buffer_unordered(num_cpus::get());
-
     let mut failures = Vec::new();
-    core.run(stream.for_each(|(test, output)| {
+
+    for future in futures {
+        let (test, output) = future.await.unwrap().unwrap();
         if output.status.success() {
             println!("test {} ... ok", test.name);
         } else {
             println!("test {} ... FAIL", test.name);
             failures.push((test, output));
         }
-        Ok(())
-    }))
-    .unwrap();
+    }
 
     if failures.is_empty() {
         println!("\ntest result: ok\n");
