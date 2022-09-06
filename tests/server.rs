@@ -72,11 +72,11 @@ bar:
     let output = c.configure_and_run(&mut cmd, |cmd| cmd.output()).unwrap();
     println!(
         "\n\t=== stderr\n\t\t{}",
-        String::from_utf8_lossy(&output.stderr).replace("\n", "\n\t\t")
+        String::from_utf8_lossy(&output.stderr).replace('\n', "\n\t\t")
     );
     println!(
         "\t=== stdout\n\t\t{}",
-        String::from_utf8_lossy(&output.stdout).replace("\n", "\n\t\t")
+        String::from_utf8_lossy(&output.stdout).replace('\n', "\n\t\t")
     );
 
     assert!(output.status.success());
@@ -126,11 +126,11 @@ bar:
     let output = c.configure_and_run(&mut cmd, |cmd| cmd.output()).unwrap();
     println!(
         "\n\t=== stderr\n\t\t{}",
-        String::from_utf8_lossy(&output.stderr).replace("\n", "\n\t\t")
+        String::from_utf8_lossy(&output.stderr).replace('\n', "\n\t\t")
     );
     println!(
         "\t=== stdout\n\t\t{}",
-        String::from_utf8_lossy(&output.stdout).replace("\n", "\n\t\t")
+        String::from_utf8_lossy(&output.stdout).replace('\n', "\n\t\t")
     );
 
     assert!(output.status.success());
