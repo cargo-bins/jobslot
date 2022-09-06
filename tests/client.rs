@@ -13,15 +13,6 @@ use jobslot::Client;
 use tokio_core::reactor::Core;
 use tokio_process::CommandExt;
 
-macro_rules! t {
-    ($e:expr) => {
-        match $e {
-            Ok(e) => e,
-            Err(e) => panic!("{} failed with {}", stringify!($e), e),
-        }
-    };
-}
-
 struct Test {
     name: &'static str,
     f: &'static dyn Fn(),
@@ -114,11 +105,11 @@ fn main() {
         return (TESTS.iter().find(|t| t.name == test).unwrap().f)();
     }
 
-    let me = t!(env::current_exe());
+    let me = env::current_exe().unwrap();
     let me = me.to_str().unwrap();
     let filter = env::args().nth(1);
 
-    let mut core = t!(Core::new());
+    let mut core = Core::new().unwrap();
 
     let futures = TESTS
         .iter()
@@ -127,7 +118,7 @@ fn main() {
             None => true,
         })
         .map(|test| {
-            let td = t!(tempfile::tempdir());
+            let td = tempfile::tempdir().unwrap();
             let makefile = format!(
                 "\
 all: export TEST_TO_RUN={}
@@ -137,7 +128,10 @@ all:
                 test.name,
                 (test.rule)(me)
             );
-            t!(t!(File::create(td.path().join("Makefile"))).write_all(makefile.as_bytes()));
+            File::create(td.path().join("Makefile"))
+                .unwrap()
+                .write_all(makefile.as_bytes())
+                .unwrap();
             let prog = env::var("MAKE").unwrap_or_else(|_| "make".to_string());
             let mut cmd = Command::new(prog);
             cmd.args(test.make_args);
@@ -156,7 +150,7 @@ all:
     let stream = stream::iter(futures.into_iter().map(Ok)).buffer_unordered(num_cpus::get());
 
     let mut failures = Vec::new();
-    t!(core.run(stream.for_each(|(test, output)| {
+    core.run(stream.for_each(|(test, output)| {
         if output.status.success() {
             println!("test {} ... ok", test.name);
         } else {
@@ -164,7 +158,8 @@ all:
             failures.push((test, output));
         }
         Ok(())
-    })));
+    }))
+    .unwrap();
 
     if failures.is_empty() {
         println!("\ntest result: ok\n");
