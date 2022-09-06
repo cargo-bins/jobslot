@@ -78,21 +78,25 @@
 #![deny(missing_docs, missing_debug_implementations)]
 #![doc(html_root_url = "https://docs.rs/jobserver/0.1")]
 
-use std::env;
-use std::ffi;
-use std::io;
-use std::process;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::{
+    env, ffi, io, process,
+    sync::{Arc, Condvar, Mutex, MutexGuard},
+};
 
-#[cfg(unix)]
-#[path = "unix.rs"]
-mod imp;
-#[cfg(windows)]
-#[path = "windows.rs"]
-mod imp;
-#[cfg(not(any(unix, windows)))]
-#[path = "wasm.rs"]
-mod imp;
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(unix)] {
+        #[path = "unix.rs"]
+        mod imp;
+    } else if #[cfg(windows)] {
+        #[path = "windows.rs"]
+        mod imp;
+    } else if #[cfg(not(any(unix, windows)))] {
+        #[path = "wasm.rs"]
+        mod imp;
+    }
+}
 
 /// Command that can be accepted by this crate.
 pub trait Command {
