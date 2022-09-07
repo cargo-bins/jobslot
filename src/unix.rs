@@ -55,7 +55,7 @@ impl Client {
 
             static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
             if PIPE2_AVAILABLE.load(Ordering::SeqCst) {
-                match libc::syscall(libc::SYS_pipe2, pipes.as_mut_ptr(), libc::O_CLOEXEC) {
+                match libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) {
                     -1 => {
                         let err = io::Error::last_os_error();
                         if err.raw_os_error() == Some(libc::ENOSYS) {
