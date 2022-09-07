@@ -52,6 +52,23 @@
 //! let child = client.configure_and_run(&mut cmd, |cmd| cmd.spawn()).unwrap();
 //! ```
 //!
+//! ## Features
+//!
+//!  - tokio: This would enable support of `tokio::process::Command`.
+//!    You would be able to write:
+//!
+//!    ```
+//!    use tokio::process::Command;
+//!    use jobslot::Client;
+//!
+//!    # #[tokio::main]
+//!    # async fn main() {
+//!    let client = Client::new(4).expect("failed to create jobserver");
+//!    let mut cmd = Command::new("make");
+//!    let child = client.configure_and_run(&mut cmd, |cmd| cmd.spawn()).unwrap();
+//!    # }
+//!    ```
+//!
 //! ## Caveats
 //!
 //! This crate makes no attempt to release tokens back to a jobserver on
