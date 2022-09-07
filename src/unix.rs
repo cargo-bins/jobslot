@@ -54,12 +54,12 @@ impl Client {
             use std::sync::atomic::{AtomicBool, Ordering};
 
             static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
-            if PIPE2_AVAILABLE.load(Ordering::SeqCst) {
+            if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
                 match libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) {
                     -1 => {
                         let err = io::Error::last_os_error();
                         if err.raw_os_error() == Some(libc::ENOSYS) {
-                            PIPE2_AVAILABLE.store(false, Ordering::SeqCst);
+                            PIPE2_AVAILABLE.store(false, Ordering::Relaxed);
                         } else {
                             return Err(err);
                         }
