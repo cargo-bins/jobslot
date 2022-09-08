@@ -60,10 +60,10 @@ impl Client {
                 match cvt(libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC)) {
                     Ok(_) => return Ok(Client::from_fds(pipes[0], pipes[1])),
                     Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
-                }
 
-                // err.raw_os_error() == Some(libc::ENOSYS)
-                PIPE2_AVAILABLE.store(false, Ordering::Relaxed);
+                    // err.raw_os_error() == Some(libc::ENOSYS)
+                    _ => PIPE2_AVAILABLE.store(false, Ordering::Relaxed),
+                }
             }
         }
 
