@@ -90,7 +90,11 @@ impl Client {
         // access to the file descriptors.
         if is_valid_fd(read) && is_valid_fd(write) {
             drop(set_cloexec(read, true));
+            drop(set_nonblocking(read, false));
+
             drop(set_cloexec(write, true));
+            drop(set_nonblocking(write, false));
+
             Some(Client::from_fds(read, write))
         } else {
             None
