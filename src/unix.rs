@@ -55,16 +55,15 @@ impl Client {
 
             static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
             if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
-                match libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) {
-                    -1 => {
-                        let err = io::Error::last_os_error();
-                        if err.raw_os_error() == Some(libc::ENOSYS) {
-                            PIPE2_AVAILABLE.store(false, Ordering::Relaxed);
-                        } else {
-                            return Err(err);
-                        }
+                if libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) == -1 {
+                    let err = io::Error::last_os_error();
+                    if err.raw_os_error() == Some(libc::ENOSYS) {
+                        PIPE2_AVAILABLE.store(false, Ordering::Relaxed);
+                    } else {
+                        return Err(err);
                     }
-                    _ => return Ok(Client::from_fds(pipes[0], pipes[1])),
+                } else {
+                    return Ok(Client::from_fds(pipes[0], pipes[1]));
                 }
             }
         }
