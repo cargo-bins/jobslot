@@ -76,21 +76,10 @@ impl Client {
     }
 
     pub unsafe fn open(s: &str) -> Option<Client> {
-        let mut parts = s.splitn(2, ',');
-        let read = parts.next().unwrap();
-        let write = match parts.next() {
-            Some(s) => s,
-            None => return None,
-        };
+        let (read, write) = s.split_once(',')?;
 
-        let read = match read.parse() {
-            Ok(n) => n,
-            Err(_) => return None,
-        };
-        let write = match write.parse() {
-            Ok(n) => n,
-            Err(_) => return None,
-        };
+        let read = read.parse().ok()?;
+        let write = write.parse().ok()?;
 
         // Ok so we've got two integers that look like file descriptors, but
         // for extra sanity checking let's see if they actually look like
