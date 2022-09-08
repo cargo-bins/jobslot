@@ -87,7 +87,7 @@ impl Client {
         // If we're called from `make` *without* the leading + on our rule
         // then we'll have `MAKEFLAGS` env vars but won't actually have
         // access to the file descriptors.
-        if is_valid_fd(read) && is_valid_fd(write) {
+        if is_pipe(read, true) && is_pipe(write, false) {
             drop(set_cloexec(read, true));
             drop(set_nonblocking(read, false));
 
@@ -309,10 +309,6 @@ impl Helper {
     }
 }
 
-fn is_valid_fd(fd: c_int) -> bool {
-    unsafe { libc::fcntl(fd, libc::F_GETFD) != -1 }
-}
-
 fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     unsafe {
         let previous = cvt(libc::fcntl(fd, libc::F_GETFD))?;
@@ -352,4 +348,35 @@ extern "C" fn sigusr1_handler(
     _ptr: *mut libc::c_void,
 ) {
     // nothing to do
+}
+
+fn is_pipe(fd: RawFd, readable: bool) -> bool {
+    let mut stat = mem::MaybeUninit::<libc::stat>::uninit();
+
+    if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } == -1 {
+        return false;
+    }
+
+    // Safety:
+    //
+    // libc::fstat succeeds, stat is initialized
+    let stat = unsafe { stat.assume_init() };
+    if (stat.st_mode & libc::S_IFMT) != libc::S_IFIFO {
+        // fd is not a pipe
+        return false;
+    }
+
+    let ret = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if ret == -1 {
+        return false;
+    }
+
+    let status_flags = ret;
+    let access_mode = if readable {
+        libc::O_RDONLY
+    } else {
+        libc::O_WRONLY
+    };
+
+    (status_flags & libc::O_ACCMODE) == access_mode
 }
