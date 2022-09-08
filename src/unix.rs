@@ -12,7 +12,9 @@ use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Client {
+    /// This fd is set to be blocking
     read: File,
+    /// This fd is set to be blocking
     write: File,
 }
 
@@ -116,61 +118,14 @@ impl Client {
     /// Block waiting for a token, returning `None` if we're interrupted with
     /// EINTR.
     fn acquire_allow_interrupts(&self) -> io::Result<Option<Acquired>> {
-        // We don't actually know if the file descriptor here is set in
-        // blocking or nonblocking mode. AFAIK all released versions of
-        // `make` use blocking fds for the jobserver, but the unreleased
-        // version of `make` doesn't. In the unreleased version jobserver
-        // fds are set to nonblocking and combined with `pselect`
-        // internally.
-        //
-        // Here we try to be compatible with both strategies. We optimistically
-        // try to read from the file descriptor which then may block, return
-        // a token or indicate that polling is needed.
-        // Blocking reads (if possible) allows the kernel to be more selective
-        // about which readers to wake up when a token is written to the pipe.
-        //
-        // We use `poll` here to block this thread waiting for read
-        // readiness, and then afterwards we perform the `read` itself. If
-        // the `read` returns that it would block then we start over and try
-        // again.
-        //
         // Also note that we explicitly don't handle EINTR here. That's used
         // to shut us down, so we otherwise punt all errors upwards.
-        unsafe {
-            let mut fd: libc::pollfd = mem::zeroed();
-            fd.fd = self.read.as_raw_fd();
-            fd.events = libc::POLLIN;
-            loop {
-                let mut buf = [0];
-                match (&self.read).read(&mut buf) {
-                    Ok(1) => return Ok(Some(Acquired { byte: buf[0] })),
-                    Ok(_) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "early EOF on jobserver pipe",
-                        ))
-                    }
-                    Err(e) => match e.kind() {
-                        io::ErrorKind::WouldBlock => { /* fall through to polling */ }
-                        io::ErrorKind::Interrupted => return Ok(None),
-                        _ => return Err(e),
-                    },
-                }
-
-                loop {
-                    fd.revents = 0;
-                    if libc::poll(&mut fd, 1, -1) == -1 {
-                        let e = io::Error::last_os_error();
-                        return match e.kind() {
-                            io::ErrorKind::Interrupted => Ok(None),
-                            _ => Err(e),
-                        };
-                    }
-                    if fd.revents != 0 {
-                        break;
-                    }
-                }
-            }
+        let mut buf = [0];
+        match (&self.read).read(&mut buf) {
+            Ok(1) => Ok(Some(Acquired { byte: buf[0] })),
+            Ok(_) => Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
