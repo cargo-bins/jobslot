@@ -301,26 +301,18 @@ impl Client {
     /// Note, though, that on Windows it should be safe to call this function
     /// any number of times.
     pub unsafe fn from_env() -> Option<Client> {
-        let var = match env::var("CARGO_MAKEFLAGS")
+        let var = env::var("CARGO_MAKEFLAGS")
             .or_else(|_| env::var("MAKEFLAGS"))
             .or_else(|_| env::var("MFLAGS"))
-        {
-            Ok(s) => s,
-            Err(_) => return None,
-        };
-        let mut arg = "--jobserver-fds=";
-        let pos = match var.find(arg) {
-            Some(i) => i,
-            None => {
-                arg = "--jobserver-auth=";
-                match var.find(arg) {
-                    Some(i) => i,
-                    None => return None,
-                }
-            }
-        };
+            .ok()?;
 
-        let s = var[pos + arg.len()..].split(' ').next().unwrap();
+        let mut arg = "--jobserver-fds=";
+        let pos = var.find(arg).or_else(|| {
+            arg = "--jobserver-auth=";
+            var.find(arg)
+        })?;
+
+        let s = var[pos + arg.len()..].split(' ').next()?;
         imp::Client::open(s).map(|c| Client { inner: Arc::new(c) })
     }
 
