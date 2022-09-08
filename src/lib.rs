@@ -306,13 +306,14 @@ impl Client {
             .or_else(|_| env::var("MFLAGS"))
             .ok()?;
 
-        let mut arg = "--jobserver-fds=";
-        let pos = var.find(arg).or_else(|| {
-            arg = "--jobserver-auth=";
-            var.find(arg)
-        })?;
+        let s = var
+            .split_ascii_whitespace()
+            .filter_map(|arg| {
+                arg.strip_prefix("--jobserver-fds=")
+                    .or_else(|| arg.strip_prefix("--jobserver-auth="))
+            })
+            .find(|s| !s.is_empty())?;
 
-        let s = var[pos + arg.len()..].split(' ').next()?;
         imp::Client::open(s).map(|c| Client { inner: Arc::new(c) })
     }
 
