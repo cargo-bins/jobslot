@@ -409,13 +409,14 @@ impl Client {
             cmd.env(env, &value);
         }
 
-        let res = self.do_run(&mut cmd, f);
+        // Use RAII to ensure env_remove is called on unwinding
+        let mut cmd = scopeguard::guard(cmd, |mut cmd| {
+            for env in envs {
+                cmd.env_remove(env);
+            }
+        });
 
-        for env in envs {
-            cmd.env_remove(env);
-        }
-
-        res
+        self.do_run(&mut *cmd, f)
     }
 
     fn do_run<Cmd, F, R>(&self, cmd: &mut Cmd, f: F) -> io::Result<R>
