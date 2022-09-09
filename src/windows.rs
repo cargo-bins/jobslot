@@ -58,8 +58,6 @@ extern "system" {
     ) -> HANDLE;
     fn OpenSemaphoreA(dwDesiredAccess: DWORD, bInheritHandle: BOOL, lpName: *const i8) -> HANDLE;
     fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
-    #[link_name = "SystemFunction036"]
-    fn RtlGenRandom(RandomBuffer: *mut u8, RandomBufferLength: u32) -> u8;
 }
 
 impl Client {
