@@ -24,6 +24,8 @@ use winapi::{
     },
 };
 
+const WAIT_OBJECT_1: u32 = WAIT_OBJECT_0 + 1;
+
 #[derive(Debug)]
 pub struct Client {
     sem: Handle,
@@ -164,7 +166,6 @@ pub(crate) fn spawn_helper(
     let thread = Builder::new().spawn(move || {
         let objects = [event2.0, client.inner.sem.0];
         state.for_each_request(|_| {
-            const WAIT_OBJECT_1: u32 = WAIT_OBJECT_0 + 1;
             match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) } {
                 WAIT_OBJECT_0 => return,
                 WAIT_OBJECT_1 => f(Ok(crate::Acquired {
