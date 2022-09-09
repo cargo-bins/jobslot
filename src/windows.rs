@@ -37,35 +37,35 @@ pub struct Acquired;
 
 impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
-        // Try a bunch of random semaphore names until we get a unique one,
-        // but don't try for too long.
-        //
         // Note that `limit == 0` is a valid argument above but Windows
         // won't let us create a semaphore with 0 slots available to it. Get
         // `limit == 0` working by creating a semaphore instead with one
         // slot and then immediately acquire it (without ever releaseing it
         // back).
+        let create_limit = if limit == 0 { 1 } else { limit };
+
+        // Try a bunch of random semaphore names until we get a unique one,
+        // but don't try for too long.
         for _ in 0..100 {
             let mut bytes = [0; 4];
             getrandom(&mut bytes)?;
+
             let mut name = format!("__rust_jobserver_semaphore_{}\0", u32::from_ne_bytes(bytes));
-            let create_limit = if limit == 0 { 1 } else { limit };
-            let r = unsafe {
-                CreateSemaphoreA(
+            let sem = unsafe {
+                Handle::new_or_err(CreateSemaphoreA(
                     ptr::null_mut(),
                     create_limit as LONG,
                     create_limit as LONG,
                     name.as_ptr() as *const _,
-                )
+                ))?
             };
-            let handle = unsafe { Handle::new_or_err(r)? };
 
             let err = io::Error::last_os_error();
             if err.raw_os_error() == Some(ERROR_ALREADY_EXISTS as i32) {
                 continue;
             }
             name.pop(); // chop off the trailing nul
-            let client = Client { sem: handle, name };
+            let client = Client { sem, name };
             if create_limit != limit {
                 client.acquire()?;
             }
