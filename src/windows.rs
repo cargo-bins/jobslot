@@ -158,7 +158,7 @@ pub(crate) fn spawn_helper(
         }
     };
     let event = Arc::new(event);
-    let event2 = event.clone();
+    let event2 = Arc::clone(&event);
     let thread = Builder::new().spawn(move || {
         let objects = [event2.0, client.inner.sem.0];
         state.for_each_request(|_| {
