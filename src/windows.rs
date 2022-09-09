@@ -8,15 +8,18 @@ use std::{
 
 use getrandom::getrandom;
 use winapi::{
-    shared::minwindef::{BOOL, DWORD, LPLONG},
+    shared::{
+        minwindef::{BOOL, DWORD, FALSE, LPLONG, TRUE},
+        winerror::ERROR_ALREADY_EXISTS,
+    },
     um::{
         handleapi::CloseHandle,
         minwinbase::LPSECURITY_ATTRIBUTES,
         synchapi::{
             CreateEventA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
         },
-        winbase::{CreateSemaphoreA, OpenSemaphoreA},
-        winnt::{HANDLE, LONG, LPCSTR},
+        winbase::{CreateSemaphoreA, OpenSemaphoreA, INFINITE, WAIT_OBJECT_0},
+        winnt::{HANDLE, LONG, LPCSTR, SEMAPHORE_MODIFY_STATE, SYNCHRONIZE},
     },
 };
 
@@ -28,14 +31,6 @@ pub struct Client {
 
 #[derive(Debug)]
 pub struct Acquired;
-
-const ERROR_ALREADY_EXISTS: DWORD = 183;
-const FALSE: BOOL = 0;
-const INFINITE: DWORD = 0xffffffff;
-const SEMAPHORE_MODIFY_STATE: DWORD = 0x2;
-const SYNCHRONIZE: DWORD = 0x00100000;
-const TRUE: BOOL = 1;
-const WAIT_OBJECT_0: DWORD = 0;
 
 impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
