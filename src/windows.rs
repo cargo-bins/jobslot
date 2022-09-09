@@ -126,11 +126,11 @@ impl Client {
 struct Handle(NonNull<c_void>);
 
 impl Handle {
-    fn new(handle: HANDLE) -> Option<Self> {
+    unsafe fn new(handle: HANDLE) -> Option<Self> {
         NonNull::new(handle).map(Self)
     }
 
-    fn new_or_err(handle: HANDLE) -> Result<Self, io::Error> {
+    unsafe fn new_or_err(handle: HANDLE) -> Result<Self, io::Error> {
         Self::new(handle).ok_or_else(io::Error::last_os_error)
     }
 }
