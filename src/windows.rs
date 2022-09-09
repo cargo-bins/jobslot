@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    convert::TryInto,
     ffi::CString,
     io,
     os::raw::c_void,
