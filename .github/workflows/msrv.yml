@@ -6,7 +6,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: msrv
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
