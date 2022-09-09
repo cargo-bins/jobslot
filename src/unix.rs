@@ -271,18 +271,16 @@ impl Helper {
 }
 
 fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
-    unsafe {
-        let previous = cvt(libc::fcntl(fd, libc::F_GETFD))?;
-        let new = if set {
-            previous | libc::FD_CLOEXEC
-        } else {
-            previous & !libc::FD_CLOEXEC
-        };
-        if new != previous {
-            cvt(libc::fcntl(fd, libc::F_SETFD, new))?;
-        }
-        Ok(())
+    let previous = cvt(unsafe { libc::fcntl(fd, libc::F_GETFD) })?;
+    let new = if set {
+        previous | libc::FD_CLOEXEC
+    } else {
+        previous & !libc::FD_CLOEXEC
+    };
+    if new != previous {
+        cvt(unsafe { libc::fcntl(fd, libc::F_SETFD, new) })?;
     }
+    Ok(())
 }
 
 fn set_nonblocking(fd: c_int, set: bool) -> io::Result<()> {
