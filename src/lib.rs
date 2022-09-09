@@ -362,18 +362,12 @@ impl Client {
     /// two file descriptors for this client to be inherited to the child.
     ///
     /// On platforms other than Unix and Windows this panics.
-    pub fn configure_and_run<Cmd, F, R>(&self, mut cmd: Cmd, f: F) -> io::Result<R>
+    pub fn configure_and_run<Cmd, F, R>(&self, cmd: Cmd, f: F) -> io::Result<R>
     where
         Cmd: Command,
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
-        cmd.env("CARGO_MAKEFLAGS", &self.mflags_env());
-
-        let res = self.do_run(&mut cmd, f);
-
-        cmd.env_remove("CARGO_MAKEFLAGS");
-
-        res
+        self.configure_and_run_inner(cmd, f, &["CARGO_MAKEFLAGS"])
     }
 
     /// Configures a child process to have access to this client's jobserver as
@@ -396,21 +390,30 @@ impl Client {
     /// this client to be inherited to the child.
     ///
     /// On platforms other than Unix and Windows this panics.
-    pub fn configure_make_and_run<Cmd, F, R>(&self, mut cmd: Cmd, f: F) -> io::Result<R>
+    pub fn configure_make_and_run<Cmd, F, R>(&self, cmd: Cmd, f: F) -> io::Result<R>
+    where
+        Cmd: Command,
+        F: FnOnce(&mut Cmd) -> io::Result<R>,
+    {
+        self.configure_and_run_inner(cmd, f, &["CARGO_MAKEFLAGS", "MAKEFLAGS", "MFLAGS"])
+    }
+
+    fn configure_and_run_inner<Cmd, F, R>(&self, mut cmd: Cmd, f: F, envs: &[&str]) -> io::Result<R>
     where
         Cmd: Command,
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
         let value = self.mflags_env();
-        cmd.env("CARGO_MAKEFLAGS", &value)
-            .env("MAKEFLAGS", &value)
-            .env("MFLAGS", &value);
+
+        for env in envs {
+            cmd.env(env, &value);
+        }
 
         let res = self.do_run(&mut cmd, f);
 
-        cmd.env_remove("CARGO_MAKEFLAGS")
-            .env_remove("MAKEFLAGS")
-            .env_remove("MFLAGS");
+        for env in envs {
+            cmd.env_remove(env);
+        }
 
         res
     }
