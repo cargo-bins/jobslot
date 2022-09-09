@@ -15,8 +15,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Rust
         run: |
-          rustup toolchain add 1.49 nightly --no-self-update
-          rustup default 1.49
+          rustup toolchain add 1.52 nightly --no-self-update
+          rustup default 1.52
       - name: Generate Cargo.lock
         run: cargo +nightly update
       - name: Configure caching
@@ -27,5 +27,5 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ matrix.os }}-1.49-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ matrix.os }}-1.52-${{ hashFiles('**/Cargo.lock') }}
       - run: cargo check --all-features
