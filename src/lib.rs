@@ -101,6 +101,7 @@ use std::{
 };
 
 use cfg_if::cfg_if;
+use scopeguard::{guard, ScopeGuard};
 
 cfg_if! {
     if #[cfg(unix)] {
@@ -420,7 +421,15 @@ impl Client {
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
         self.inner.pre_run()?;
+
+        // Use RAII to ensure post_run is called on unwinding
+        let guard = guard(&self.inner, |inner| drop(inner.post_run()));
+
         let res = f(cmd);
+
+        // f(cmd) does not panic.
+        // Call post_run manually to propagate its error.
+        ScopeGuard::into_inner(guard);
         self.inner.post_run()?;
 
         res
