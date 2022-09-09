@@ -355,6 +355,11 @@ impl Client {
     /// words, if not called, then `Client::from_env` will return `None` in the
     /// child process (or the equivalent of `Child::from_env` that `make` uses).
     ///
+    /// ## Environment variables
+    ///
+    /// This function only sets up `CARGO_MAKEFLAGS`, which is used by
+    /// `cargo`.
+    ///
     /// ## Platform-specific behavior
     ///
     /// On Unix and Windows this will clobber the `CARGO_MAKEFLAGS` environment
@@ -381,6 +386,11 @@ impl Client {
     /// then this `Client` will not be accessible in the child process. In other
     /// words, if not called, then `Client::from_env` will return `None` in the
     /// child process (or the equivalent of `Child::from_env` that `make` uses).
+    ///
+    /// ## Environment variables
+    ///
+    /// This function sets up `CARGO_MAKEFLAGS`, `MAKEFLAGS` and `MFLAGS`,
+    /// which is used by `cargo` and `make`.
     ///
     /// ## Platform-specific behavior
     ///
