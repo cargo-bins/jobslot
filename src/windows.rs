@@ -7,6 +7,18 @@ use std::{
 };
 
 use getrandom::getrandom;
+use winapi::{
+    shared::minwindef::{BOOL, DWORD, LPLONG},
+    um::{
+        handleapi::CloseHandle,
+        minwinbase::LPSECURITY_ATTRIBUTES,
+        synchapi::{
+            CreateEventA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
+        },
+        winbase::{CreateSemaphoreA, OpenSemaphoreA},
+        winnt::{HANDLE, LONG, LPCSTR},
+    },
+};
 
 #[derive(Debug)]
 pub struct Client {
@@ -17,11 +29,6 @@ pub struct Client {
 #[derive(Debug)]
 pub struct Acquired;
 
-type BOOL = i32;
-type DWORD = u32;
-type HANDLE = *mut u8;
-type LONG = i32;
-
 const ERROR_ALREADY_EXISTS: DWORD = 183;
 const FALSE: BOOL = 0;
 const INFINITE: DWORD = 0xffffffff;
@@ -29,36 +36,6 @@ const SEMAPHORE_MODIFY_STATE: DWORD = 0x2;
 const SYNCHRONIZE: DWORD = 0x00100000;
 const TRUE: BOOL = 1;
 const WAIT_OBJECT_0: DWORD = 0;
-
-extern "system" {
-    fn CloseHandle(handle: HANDLE) -> BOOL;
-    fn SetEvent(hEvent: HANDLE) -> BOOL;
-    fn WaitForMultipleObjects(
-        ncount: DWORD,
-        lpHandles: *const HANDLE,
-        bWaitAll: BOOL,
-        dwMilliseconds: DWORD,
-    ) -> DWORD;
-    fn CreateEventA(
-        lpEventAttributes: *mut u8,
-        bManualReset: BOOL,
-        bInitialState: BOOL,
-        lpName: *const i8,
-    ) -> HANDLE;
-    fn ReleaseSemaphore(
-        hSemaphore: HANDLE,
-        lReleaseCount: LONG,
-        lpPreviousCount: *mut LONG,
-    ) -> BOOL;
-    fn CreateSemaphoreA(
-        lpEventAttributes: *mut u8,
-        lInitialCount: LONG,
-        lMaximumCount: LONG,
-        lpName: *const i8,
-    ) -> HANDLE;
-    fn OpenSemaphoreA(dwDesiredAccess: DWORD, bInheritHandle: BOOL, lpName: *const i8) -> HANDLE;
-    fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
-}
 
 impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
