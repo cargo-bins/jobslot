@@ -49,27 +49,27 @@ impl Client {
             let mut bytes = [0; 4];
             getrandom(&mut bytes)?;
             let mut name = format!("__rust_jobserver_semaphore_{}\0", u32::from_ne_bytes(bytes));
-            unsafe {
-                let create_limit = if limit == 0 { 1 } else { limit };
-                let r = CreateSemaphoreA(
+            let create_limit = if limit == 0 { 1 } else { limit };
+            let r = unsafe {
+                CreateSemaphoreA(
                     ptr::null_mut(),
                     create_limit as LONG,
                     create_limit as LONG,
                     name.as_ptr() as *const _,
-                );
-                let handle = Handle::new_or_err(r)?;
+                )
+            };
+            let handle = unsafe { Handle::new_or_err(r)? };
 
-                let err = io::Error::last_os_error();
-                if err.raw_os_error() == Some(ERROR_ALREADY_EXISTS as i32) {
-                    continue;
-                }
-                name.pop(); // chop off the trailing nul
-                let client = Client { sem: handle, name };
-                if create_limit != limit {
-                    client.acquire()?;
-                }
-                return Ok(client);
+            let err = io::Error::last_os_error();
+            if err.raw_os_error() == Some(ERROR_ALREADY_EXISTS as i32) {
+                continue;
             }
+            name.pop(); // chop off the trailing nul
+            let client = Client { sem: handle, name };
+            if create_limit != limit {
+                client.acquire()?;
+            }
+            return Ok(client);
         }
 
         Err(io::Error::new(
