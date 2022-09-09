@@ -90,7 +90,7 @@ impl Client {
 
     pub fn acquire(&self) -> io::Result<Acquired> {
         unsafe {
-            let r = WaitForSingleObject(self.sem.0, INFINITE);
+            let r = WaitForSingleObject(self.sem.0.as_ptr(), INFINITE);
             if r == WAIT_OBJECT_0 {
                 Ok(Acquired)
             } else {
@@ -101,7 +101,7 @@ impl Client {
 
     pub fn release(&self, _data: Option<&Acquired>) -> io::Result<()> {
         unsafe {
-            let r = ReleaseSemaphore(self.sem.0, 1, ptr::null_mut());
+            let r = ReleaseSemaphore(self.sem.0.as_ptr(), 1, ptr::null_mut());
             if r != 0 {
                 Ok(())
             } else {
@@ -141,7 +141,7 @@ unsafe impl Send for Handle {}
 impl Drop for Handle {
     fn drop(&mut self) {
         unsafe {
-            CloseHandle(self.0.as_mut_ptr());
+            CloseHandle(self.0.as_ptr());
         }
     }
 }
@@ -160,11 +160,11 @@ pub(crate) fn spawn_helper(
     let event = unsafe {
         let r = CreateEventA(ptr::null_mut(), TRUE, FALSE, ptr::null());
         Handle::new_or_err(r)
-    };
+    }?;
     let event = Arc::new(event);
     let event2 = Arc::clone(&event);
     let thread = Builder::new().spawn(move || {
-        let objects = [event2.0, client.inner.sem.0];
+        let objects = [event2.0.as_ptr(), client.inner.sem.0.as_ptr()];
         state.for_each_request(|_| {
             match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) } {
                 WAIT_OBJECT_0 => return,
@@ -188,7 +188,7 @@ impl Helper {
         // with a different event that it's also waiting on here. After
         // these two we should be guaranteed the thread is on its way out,
         // so we can safely `join`.
-        let r = unsafe { SetEvent(self.event.0) };
+        let r = unsafe { SetEvent(self.event.0.as_ptr()) };
         if r == 0 {
             panic!("failed to set event: {}", io::Error::last_os_error());
         }
