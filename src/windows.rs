@@ -1,7 +1,9 @@
 use std::{
     borrow::Cow,
     ffi::CString,
-    io, ptr,
+    io,
+    os::raw::c_void,
+    ptr::{self, NonNull},
     sync::Arc,
     thread::{Builder, JoinHandle},
 };
@@ -53,10 +55,7 @@ impl Client {
                     create_limit as LONG,
                     name.as_ptr() as *const _,
                 );
-                if r.is_null() {
-                    return Err(io::Error::last_os_error());
-                }
-                let handle = Handle(r);
+                let handle = Handle::new_or_err(r)?;
 
                 let err = io::Error::last_os_error();
                 if err.raw_os_error() == Some(ERROR_ALREADY_EXISTS as i32) {
@@ -81,14 +80,10 @@ impl Client {
         let name = CString::new(s).ok()?;
 
         let sem = OpenSemaphoreA(SYNCHRONIZE | SEMAPHORE_MODIFY_STATE, FALSE, name.as_ptr());
-        if sem.is_null() {
-            None
-        } else {
-            Some(Client {
-                sem: Handle(sem),
-                name: s.to_string(),
-            })
-        }
+        Handle::new(sem).map(|sem| Client {
+            sem,
+            name: s.to_string(),
+        })
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
@@ -125,15 +120,25 @@ impl Client {
 }
 
 #[derive(Debug)]
-struct Handle(HANDLE);
-// HANDLE is a raw ptr, but we're send/sync
+struct Handle(NonNull<c_void>);
+
+impl Handle {
+    fn new(handle: HANDLE) -> Option<Self> {
+        NonNull::new(handle).map(Self)
+    }
+
+    fn new_or_err(handle: HANDLE) -> Result<Self, io::Error> {
+        Self::new(handle).ok_or_else(io::Error::last_os_error)
+    }
+}
+
 unsafe impl Sync for Handle {}
 unsafe impl Send for Handle {}
 
 impl Drop for Handle {
     fn drop(&mut self) {
         unsafe {
-            CloseHandle(self.0);
+            CloseHandle(self.0.as_mut_ptr());
         }
     }
 }
@@ -151,11 +156,7 @@ pub(crate) fn spawn_helper(
 ) -> io::Result<Helper> {
     let event = unsafe {
         let r = CreateEventA(ptr::null_mut(), TRUE, FALSE, ptr::null());
-        if r.is_null() {
-            return Err(io::Error::last_os_error());
-        } else {
-            Handle(r)
-        }
+        Handle::new_or_err(r)
     };
     let event = Arc::new(event);
     let event2 = Arc::clone(&event);
