@@ -9,7 +9,7 @@ documentation = "https://docs.rs/jobslot"
 description = """
 An implementation of the GNU make jobserver for Rust
 """
-edition = "2021"
+edition = "2018"
 rust-version = "1.61.0"
 
 # docs.rs-specific configuration, shamelessly copied from
