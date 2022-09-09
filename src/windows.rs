@@ -120,6 +120,7 @@ impl Client {
 }
 
 #[derive(Debug)]
+#[repr(transparent)]
 struct Handle(NonNull<c_void>);
 
 impl Handle {
