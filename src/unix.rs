@@ -193,6 +193,8 @@ pub(crate) fn spawn_helper(
             sa_sigaction: sigusr1_handler as usize,
             sa_mask,
             sa_flags: libc::SA_SIGINFO as libc::c_int,
+            #[cfg(target_os = "linux")]
+            sa_restorer: None,
         };
 
         if unsafe { libc::sigaction(libc::SIGUSR1, &new, ptr::null_mut()) } != 0 {
