@@ -1,14 +1,16 @@
 use libc::c_int;
 
-use std::borrow::Cow;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::mem::MaybeUninit;
-use std::os::unix::prelude::*;
-use std::ptr;
-use std::sync::{Arc, Once};
-use std::thread::{self, Builder, JoinHandle};
-use std::time::Duration;
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{self, Read, Write},
+    mem::MaybeUninit,
+    os::unix::prelude::*,
+    ptr,
+    sync::{Arc, Once},
+    thread::{self, Builder, JoinHandle},
+    time::Duration,
+};
 
 #[derive(Debug)]
 pub struct Client {
