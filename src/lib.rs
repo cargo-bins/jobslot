@@ -267,8 +267,8 @@ impl Client {
     ///
     /// Note that the created `Client` is not automatically inherited into
     /// spawned child processes from this program. Manual usage of the
-    /// `configure` function is required for a child process to have access to a
-    /// job server.
+    /// [`Client::configure_and_run`] or [`Client::configure_make_and_run`]
+    /// function is required for a child process to have access to a job server.
     ///
     /// # Return value
     ///
