@@ -40,7 +40,7 @@ impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
         let limit: LONG = limit
             .try_into()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
         // Note that `limit == 0` is a valid argument above but Windows
         // won't let us create a semaphore with 0 slots available to it. Get
