@@ -3,7 +3,7 @@ use libc::c_int;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::mem;
+use std::mem::MaybeUninit;
 use std::os::unix::prelude::*;
 use std::ptr;
 use std::sync::{Arc, Once};
@@ -180,11 +180,20 @@ pub(crate) fn spawn_helper(
 ) -> io::Result<Helper> {
     static USR1_INIT: Once = Once::new();
     let mut err = None;
-    USR1_INIT.call_once(|| unsafe {
-        let mut new: libc::sigaction = mem::zeroed();
-        new.sa_sigaction = sigusr1_handler as usize;
-        new.sa_flags = libc::SA_SIGINFO as _;
-        if libc::sigaction(libc::SIGUSR1, &new, ptr::null_mut()) != 0 {
+    USR1_INIT.call_once(|| {
+        let mut sa_mask = MaybeUninit::uninit();
+        let ret = unsafe { libc::sigemptyset(sa_mask.as_mut_ptr()) };
+        debug_assert_eq!(ret, 0);
+
+        let sa_mask = unsafe { sa_mask.assume_init() };
+
+        let new = libc::sigaction {
+            sa_sigaction: sigusr1_handler as usize,
+            sa_mask,
+            sa_flags: libc::SA_SIGINFO as libc::c_int,
+        };
+
+        if unsafe { libc::sigaction(libc::SIGUSR1, &new, ptr::null_mut()) } != 0 {
             err = Some(io::Error::last_os_error());
         }
     });
@@ -303,7 +312,7 @@ extern "C" fn sigusr1_handler(
 }
 
 fn is_pipe(fd: RawFd, readable: bool) -> bool {
-    let mut stat = mem::MaybeUninit::<libc::stat>::uninit();
+    let mut stat = MaybeUninit::<libc::stat>::uninit();
 
     if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } == -1 {
         return false;
