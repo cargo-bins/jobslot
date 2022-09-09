@@ -6,6 +6,8 @@ use std::{
     thread::{Builder, JoinHandle},
 };
 
+use getrandom::getrandom;
+
 #[derive(Debug)]
 pub struct Client {
     sem: Handle,
@@ -58,25 +60,6 @@ extern "system" {
     fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
     #[link_name = "SystemFunction036"]
     fn RtlGenRandom(RandomBuffer: *mut u8, RandomBufferLength: u32) -> u8;
-}
-
-// Note that we ideally would use the `getrandom` crate, but unfortunately
-// that causes build issues when this crate is used in rust-lang/rust (see
-// rust-lang/rust#65014 for more information). As a result we just inline
-// the pretty simple Windows-specific implementation of generating
-// randomness.
-fn getrandom(dest: &mut [u8]) -> io::Result<()> {
-    // Prevent overflow of u32
-    for chunk in dest.chunks_mut(u32::max_value() as usize) {
-        let ret = unsafe { RtlGenRandom(chunk.as_mut_ptr(), chunk.len() as u32) };
-        if ret == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "failed to generate random bytes",
-            ));
-        }
-    }
-    Ok(())
 }
 
 impl Client {
