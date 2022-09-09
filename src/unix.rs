@@ -25,7 +25,7 @@ pub struct Acquired {
 
 impl Client {
     pub fn new(mut limit: usize) -> io::Result<Client> {
-        let client = unsafe { Client::mk()? };
+        let client = Client::mk()?;
 
         // I don't think the character written here matters, but I could be
         // wrong!
@@ -45,7 +45,7 @@ impl Client {
         Ok(client)
     }
 
-    unsafe fn mk() -> io::Result<Client> {
+    fn mk() -> io::Result<Client> {
         let mut pipes = [0; 2];
 
         // Attempt atomically-create-with-cloexec if we can on Linux,
@@ -57,8 +57,8 @@ impl Client {
 
             static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
             if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
-                match cvt(libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC)) {
-                    Ok(_) => return Ok(Client::from_fds(pipes[0], pipes[1])),
+                match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
+                    Ok(_) => return Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) }),
                     Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
                     // err.raw_os_error() == Some(libc::ENOSYS)
@@ -67,10 +67,10 @@ impl Client {
             }
         }
 
-        cvt(libc::pipe(pipes.as_mut_ptr()))?;
+        cvt(unsafe { libc::pipe(pipes.as_mut_ptr()) })?;
         drop(set_cloexec(pipes[0], true));
         drop(set_cloexec(pipes[1], true));
-        Ok(Client::from_fds(pipes[0], pipes[1]))
+        Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) })
     }
 
     pub unsafe fn open(s: &str) -> Option<Client> {
