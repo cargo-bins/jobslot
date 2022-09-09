@@ -9,17 +9,16 @@ use std::{
 use getrandom::getrandom;
 use winapi::{
     shared::{
-        minwindef::{BOOL, DWORD, FALSE, LPLONG, TRUE},
+        minwindef::{BOOL, DWORD, FALSE, TRUE},
         winerror::ERROR_ALREADY_EXISTS,
     },
     um::{
         handleapi::CloseHandle,
-        minwinbase::LPSECURITY_ATTRIBUTES,
         synchapi::{
             CreateEventA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
         },
         winbase::{CreateSemaphoreA, OpenSemaphoreA, INFINITE, WAIT_OBJECT_0},
-        winnt::{HANDLE, LONG, LPCSTR, SEMAPHORE_MODIFY_STATE, SYNCHRONIZE},
+        winnt::{HANDLE, LONG, SEMAPHORE_MODIFY_STATE, SYNCHRONIZE},
     },
 };
 
