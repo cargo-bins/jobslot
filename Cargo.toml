@@ -38,6 +38,7 @@ tokio = { version = "1.20.0", features = ["full"] }
 name = "client"
 harness = false
 path = "tests/client.rs"
+required-features = ["tokio"]
 
 [[test]]
 name = "server"
