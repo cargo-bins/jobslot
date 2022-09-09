@@ -405,31 +405,24 @@ impl Client {
     {
         let value = self.mflags_env();
 
+        // Setup env
         for env in envs {
             cmd.env(env, &value);
         }
 
-        // Use RAII to ensure env_remove is called on unwinding
-        let mut cmd = scopeguard::guard(cmd, |mut cmd| {
+        // Setup fd on unix
+        self.inner.pre_run()?;
+
+        // Use RAII to ensure env_remove and post_run is called on unwinding
+        let mut cmd = guard(cmd, |mut cmd| {
+            drop(self.inner.post_run());
+
             for env in envs {
                 cmd.env_remove(env);
             }
         });
 
-        self.do_run(&mut *cmd, f)
-    }
-
-    fn do_run<Cmd, F, R>(&self, cmd: &mut Cmd, f: F) -> io::Result<R>
-    where
-        Cmd: Command,
-        F: FnOnce(&mut Cmd) -> io::Result<R>,
-    {
-        self.inner.pre_run()?;
-
-        // Use RAII to ensure post_run is called on unwinding
-        let _guard = guard(&self.inner, |inner| drop(inner.post_run()));
-
-        f(cmd)
+        f(&mut cmd)
     }
 
     fn mflags_env(&self) -> String {
