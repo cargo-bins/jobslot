@@ -84,10 +84,7 @@ impl Client {
     }
 
     pub unsafe fn open(s: &str) -> Option<Client> {
-        let name = match CString::new(s) {
-            Ok(s) => s,
-            Err(_) => return None,
-        };
+        let name = CString::new(s).ok()?;
 
         let sem = OpenSemaphoreA(SYNCHRONIZE | SEMAPHORE_MODIFY_STATE, FALSE, name.as_ptr());
         if sem.is_null() {
