@@ -37,12 +37,16 @@ pub struct Acquired;
 
 impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
+        let limit: LONG = limit
+            .try_into()
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+
         // Note that `limit == 0` is a valid argument above but Windows
         // won't let us create a semaphore with 0 slots available to it. Get
         // `limit == 0` working by creating a semaphore instead with one
         // slot and then immediately acquire it (without ever releaseing it
         // back).
-        let create_limit = if limit == 0 { 1 } else { limit };
+        let create_limit: LONG = if limit == 0 { 1 } else { limit };
 
         // Try a bunch of random semaphore names until we get a unique one,
         // but don't try for too long.
@@ -54,8 +58,8 @@ impl Client {
             let res = unsafe {
                 Handle::new_or_err(CreateSemaphoreA(
                     ptr::null_mut(),
-                    create_limit as LONG,
-                    create_limit as LONG,
+                    create_limit,
+                    create_limit,
                     name.as_ptr() as *const _,
                 ))
             };
