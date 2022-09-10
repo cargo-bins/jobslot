@@ -160,8 +160,7 @@ pub(crate) fn spawn_helper(
     let mut shutdown_rx = unsafe { File::from_raw_fd(pipes[0]) };
     let shutdown_tx = unsafe { File::from_raw_fd(pipes[1]) };
 
-    let read = dup(client.inner.read.as_raw_fd())?;
-    let mut read = unsafe { File::from_raw_fd(read) };
+    let mut read = client.inner.read.try_clone()?;
 
     set_nonblocking(read.as_raw_fd(), true)?;
     set_nonblocking(shutdown_rx.as_raw_fd(), true)?;
