@@ -39,7 +39,7 @@ pub struct Acquired {
 impl Client {
     pub fn new(mut limit: usize) -> io::Result<Client> {
         // Create nonblocking and cloexec pipes
-        let pipes = create_pipe()?;
+        let pipes = create_pipe(true)?;
 
         let client = unsafe { Client::from_fds(pipes[0], pipes[1]) };
 
@@ -172,7 +172,10 @@ pub(crate) fn spawn_helper(
     state: Arc<super::HelperState>,
     mut f: Box<dyn FnMut(io::Result<crate::Acquired>) + Send>,
 ) -> io::Result<Helper> {
-    let pipes = create_pipe()?;
+    // Create cloexec pipes but not nonblocking, since we would never
+    // read from it and we would only write 1 and exactly 1 byte
+    // into it.
+    let pipes = create_pipe(false)?;
 
     let mut shutdown_rx = unsafe { File::from_raw_fd(pipes[0]) };
     let shutdown_tx = unsafe { File::from_raw_fd(pipes[1]) };
@@ -246,7 +249,7 @@ impl Helper {
 }
 
 /// Return fds that are nonblocking and cloexec
-fn create_pipe() -> io::Result<[RawFd; 2]> {
+fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     let mut pipes = [0; 2];
 
     // Attempt atomically-create-with-cloexec if we can on Linux,
@@ -258,9 +261,8 @@ fn create_pipe() -> io::Result<[RawFd; 2]> {
 
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
-            match cvt(unsafe {
-                libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK)
-            }) {
+            let flags = libc::O_CLOEXEC | if nonblocking { libc::O_NONBLOCK } else { 0 };
+            match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), flags) }) {
                 Ok(_) => return Ok(pipes),
                 Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
@@ -275,8 +277,10 @@ fn create_pipe() -> io::Result<[RawFd; 2]> {
     set_cloexec(pipes[0], true)?;
     set_cloexec(pipes[1], true)?;
 
-    set_nonblocking(pipes[0], true)?;
-    set_nonblocking(pipes[1], true)?;
+    if nonblocking {
+        set_nonblocking(pipes[0], true)?;
+        set_nonblocking(pipes[1], true)?;
+    }
 
     Ok(pipes)
 }
