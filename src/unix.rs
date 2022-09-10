@@ -73,13 +73,13 @@ impl Client {
             let read = dup(read).ok()?;
             let write = dup(write).ok()?;
 
-            drop(set_cloexec(read, true));
-            drop(set_cloexec(write, true));
+            set_cloexec(read, true).ok()?;
+            set_cloexec(write, true).ok()?;
 
             // Set read to nonblocking
-            drop(set_nonblocking(read, true));
+            set_nonblocking(read, true).ok()?;
             // Set write to blocking
-            drop(set_nonblocking(write, false));
+            set_nonblocking(write, false).ok()?;
 
             Some(Client::from_fds(read, write))
         } else {
