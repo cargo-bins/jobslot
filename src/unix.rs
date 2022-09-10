@@ -13,6 +13,16 @@ use std::{
 
 use crate::utils::MaybeOwned;
 
+/// Lowest file descriptor used in `Selector::try_clone`.
+///
+/// # Notes
+///
+/// Usually fds 0, 1 and 2 are standard in, out and error. Some application
+/// blindly assume this to be true, which means using any one of those a select
+/// could result in some interesting and unexpected errors. Avoid that by using
+/// an fd that doesn't have a pre-determined usage.
+const LOWEST_FD: libc::c_int = 3;
+
 #[derive(Debug)]
 pub struct Client {
     /// This fd is set to be nonblocking
@@ -71,11 +81,8 @@ impl Client {
         // then we'll have `MAKEFLAGS` env vars but won't actually have
         // access to the file descriptors.
         if is_pipe(read, true) && is_pipe(write, false) {
-            let read = dup(read).ok()?;
-            let write = dup(write).ok()?;
-
-            set_cloexec(read, true).ok()?;
-            set_cloexec(write, true).ok()?;
+            let read = dup_with_cloexec(read).ok()?;
+            let write = dup_with_cloexec(write).ok()?;
 
             // Set read to nonblocking
             set_nonblocking(read, true).ok()?;
@@ -296,6 +303,10 @@ fn set_nonblocking(fd: c_int, set: bool) -> io::Result<()> {
 
 fn dup(fd: c_int) -> io::Result<c_int> {
     cvt(unsafe { libc::dup(fd) })
+}
+
+fn dup_with_cloexec(fd: RawFd) -> io::Result<RawFd> {
+    cvt(unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, LOWEST_FD) })
 }
 
 fn cvt(t: c_int) -> io::Result<c_int> {
