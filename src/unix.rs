@@ -48,30 +48,8 @@ impl Client {
     }
 
     fn mk() -> io::Result<Client> {
-        let mut pipes = [0; 2];
+        let pipes = create_pipe()?;
 
-        // Attempt atomically-create-with-cloexec if we can on Linux,
-        // detected by using the `syscall` function in `libc` to try to work
-        // with as many kernels/glibc implementations as possible.
-        #[cfg(target_os = "linux")]
-        {
-            use std::sync::atomic::{AtomicBool, Ordering};
-
-            static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
-            if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
-                match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
-                    Ok(_) => return Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) }),
-                    Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
-
-                    // err.raw_os_error() == Some(libc::ENOSYS)
-                    _ => PIPE2_AVAILABLE.store(false, Ordering::Relaxed),
-                }
-            }
-        }
-
-        cvt(unsafe { libc::pipe(pipes.as_mut_ptr()) })?;
-        drop(set_cloexec(pipes[0], true));
-        drop(set_cloexec(pipes[1], true));
         Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) })
     }
 
@@ -272,6 +250,35 @@ impl Helper {
             drop(self.thread.join());
         }
     }
+}
+
+fn create_pipe() -> io::Result<[RawFd; 2]> {
+    let mut pipes = [0; 2];
+
+    // Attempt atomically-create-with-cloexec if we can on Linux,
+    // detected by using the `syscall` function in `libc` to try to work
+    // with as many kernels/glibc implementations as possible.
+    #[cfg(target_os = "linux")]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
+        if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
+            match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
+                Ok(_) => return Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) }),
+                Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
+
+                // err.raw_os_error() == Some(libc::ENOSYS)
+                _ => PIPE2_AVAILABLE.store(false, Ordering::Relaxed),
+            }
+        }
+    }
+
+    cvt(unsafe { libc::pipe(pipes.as_mut_ptr()) })?;
+    drop(set_cloexec(pipes[0], true));
+    drop(set_cloexec(pipes[1], true));
+
+    Ok(pipes)
 }
 
 fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
