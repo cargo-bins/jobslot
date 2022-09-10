@@ -10,6 +10,8 @@ use std::{
     thread::{Builder, JoinHandle},
 };
 
+use crate::utils::MaybeOwned;
+
 #[derive(Debug)]
 pub struct Client {
     /// This fd is set to be blocking
@@ -130,18 +132,14 @@ impl Client {
         ))
     }
 
-    pub fn pre_run(&self) -> io::Result<()> {
-        set_cloexec(self.read.as_raw_fd(), false)?;
-        set_cloexec(self.write.as_raw_fd(), false)?;
+    pub fn make_inheritable(&self) -> io::Result<MaybeOwned<'_, Self>> {
+        let read = self.read.try_clone()?;
+        let write = self.write.try_clone()?;
 
-        Ok(())
-    }
+        set_cloexec(read.as_raw_fd(), false)?;
+        set_cloexec(write.as_raw_fd(), false)?;
 
-    pub fn post_run(&self) -> io::Result<()> {
-        set_cloexec(self.read.as_raw_fd(), true)?;
-        set_cloexec(self.write.as_raw_fd(), true)?;
-
-        Ok(())
+        Ok(MaybeOwned::Owned(Self { read, write }))
     }
 }
 
