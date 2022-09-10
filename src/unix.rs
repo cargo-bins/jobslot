@@ -347,3 +347,43 @@ fn is_pipe(fd: RawFd, readable: bool) -> bool {
 
     (status_flags & libc::O_ACCMODE) == access_mode
 }
+
+/// NOTE that this is a blocking syscall, it will block
+/// until one of the fd is ready.
+fn poll_for_readiness(fds: [RawFd; 2]) -> io::Result<(bool, bool)> {
+    let mut fds = [
+        libc::pollfd {
+            fd: fds[0],
+            events: libc::POLLIN,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: fds[1],
+            events: libc::POLLIN,
+            revents: 0,
+        },
+    ];
+
+    loop {
+        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) })?;
+        if ret != 0 {
+            break;
+        }
+    }
+
+    Ok((is_ready(fds[0].revents)?, is_ready(fds[1].revents)?))
+}
+
+fn is_ready(revents: libc::c_short) -> io::Result<bool> {
+    use libc::{POLLERR, POLLHUP, POLLIN, POLLNVAL};
+
+    match revents {
+        POLLERR | POLLHUP | POLLIN => Ok(true),
+        // This should be very rare
+        POLLNVAL => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "fd of is invalid",
+        )),
+        _ => Ok(false),
+    }
+}
