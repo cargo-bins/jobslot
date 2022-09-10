@@ -133,11 +133,11 @@ impl Client {
     }
 
     pub fn make_inheritable(&self) -> io::Result<MaybeOwned<'_, Self>> {
-        let read = self.read.try_clone()?;
-        let write = self.write.try_clone()?;
+        let read = dup(self.read.as_raw_fd())?;
+        let write = dup(self.write.as_raw_fd())?;
 
-        set_cloexec(read.as_raw_fd(), false)?;
-        set_cloexec(write.as_raw_fd(), false)?;
+        let read = unsafe { File::from_raw_fd(read) };
+        let write = unsafe { File::from_raw_fd(write) };
 
         Ok(MaybeOwned::Owned(Self { read, write }))
     }
