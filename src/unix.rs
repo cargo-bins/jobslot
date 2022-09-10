@@ -314,7 +314,10 @@ fn dup(fd: c_int) -> io::Result<c_int> {
 
 fn dup_with_cloexec(fd: RawFd) -> io::Result<RawFd> {
     match cvt(unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, LOWEST_FD) }) {
-        Err(err) if err.kind() == io::ErrorKind::Unsupported => {
+        Err(err)
+            if err.raw_os_error() == Some(libc::ENOSYS)
+                || err.raw_os_error() == Some(libc::EINVAL) =>
+        {
             // Fallback to dup + set_cloexec
             let new_fd = dup(fd)?;
             set_cloexec(new_fd, true)?;
