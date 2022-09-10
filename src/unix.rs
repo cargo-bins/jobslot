@@ -2,6 +2,7 @@ use libc::c_int;
 
 use std::{
     borrow::Cow,
+    convert::TryInto,
     fs::File,
     io::{self, Read, Write},
     mem::MaybeUninit,
@@ -353,7 +354,7 @@ fn poll_for_readiness2(fds: [RawFd; 2]) -> io::Result<(bool, bool)> {
     ];
 
     loop {
-        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) })?;
+        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), -1) })?;
         if ret != 0 {
             break;
         }
@@ -372,7 +373,7 @@ fn poll_for_readiness1(fd: RawFd) -> io::Result<()> {
     }];
 
     loop {
-        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) })?;
+        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), -1) })?;
         if ret != 0 && is_ready(fds[0].revents)? {
             break Ok(());
         }
