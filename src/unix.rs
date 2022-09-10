@@ -7,6 +7,7 @@ use std::{
     io::{self, Read, Write},
     mem::MaybeUninit,
     os::unix::prelude::*,
+    sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
     thread::{Builder, JoinHandle},
 };
@@ -257,8 +258,6 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     // with as many kernels/glibc implementations as possible.
     #[cfg(target_os = "linux")]
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
-
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
             let flags = libc::O_CLOEXEC | if nonblocking { libc::O_NONBLOCK } else { 0 };
@@ -313,20 +312,26 @@ fn dup(fd: c_int) -> io::Result<c_int> {
 }
 
 fn dup_with_cloexec(fd: RawFd) -> io::Result<RawFd> {
-    match cvt(unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, LOWEST_FD) }) {
-        Err(err)
-            if err.raw_os_error() == Some(libc::ENOSYS)
+    static F_DUPFD_CLOEXEC_AVAILBILITY: AtomicBool = AtomicBool::new(true);
+
+    if F_DUPFD_CLOEXEC_AVAILBILITY.load(Ordering::Relaxed) {
+        match cvt(unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, LOWEST_FD) }) {
+            Err(err)
+                if err.raw_os_error() == Some(libc::ENOSYS)
                 // If the flag F_DUPFD_CLOEXEC is invalid, then it might
                 // return EINVAL.
                 || err.raw_os_error() == Some(libc::EINVAL) =>
-        {
-            // Fallback to dup + set_cloexec
-            let new_fd = dup(fd)?;
-            set_cloexec(new_fd, true)?;
-            Ok(new_fd)
+            {
+                F_DUPFD_CLOEXEC_AVAILBILITY.store(false, Ordering::Relaxed)
+            }
+            res => return res,
         }
-        res => res,
     }
+
+    // Fallback to dup + set_cloexec
+    let new_fd = dup(fd)?;
+    set_cloexec(new_fd, true)?;
+    Ok(new_fd)
 }
 
 fn cvt(t: c_int) -> io::Result<c_int> {
