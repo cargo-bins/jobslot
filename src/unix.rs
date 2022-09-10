@@ -256,7 +256,7 @@ fn create_pipe() -> io::Result<[RawFd; 2]> {
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
             match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
-                Ok(_) => return Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) }),
+                Ok(_) => return Ok(pipes),
                 Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
                 // err.raw_os_error() == Some(libc::ENOSYS)
