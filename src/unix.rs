@@ -142,10 +142,7 @@ impl Client {
         let byte = data.map(|d| d.byte).unwrap_or(b'+');
         match (&self.write).write(&[byte])? {
             1 => Ok(()),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "failed to write token back to jobserver",
-            )),
+            _ => Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
         }
     }
 
