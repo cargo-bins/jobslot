@@ -38,33 +38,29 @@ pub struct Acquired {
 
 impl Client {
     pub fn new(mut limit: usize) -> io::Result<Client> {
-        let client = Client::mk()?;
+        // Create nonblocking and cloexec pipes
+        let pipes = create_pipe()?;
+
+        let client = unsafe { Client::from_fds(pipes[0], pipes[1]) };
 
         // I don't think the character written here matters, but I could be
         // wrong!
         const BUFFER: [u8; 128] = [b'|'; 128];
 
-        set_nonblocking(client.write.as_raw_fd(), true)?;
-
         while limit > 0 {
             let n = limit.min(BUFFER.len());
 
+            // Use nonblocking write here so that if the pipe
+            // would block, then return err instead of blocking
+            // the entire process forever.
             (&client.write).write_all(&BUFFER[..n])?;
             limit -= n;
         }
 
+        // Set fd to be blocking
         set_nonblocking(client.write.as_raw_fd(), false)?;
 
         Ok(client)
-    }
-
-    fn mk() -> io::Result<Client> {
-        let pipes = create_pipe()?;
-
-        // Set read to nonblocking
-        set_nonblocking(pipes[0], true)?;
-
-        Ok(unsafe { Client::from_fds(pipes[0], pipes[1]) })
     }
 
     pub unsafe fn open(s: &str) -> Option<Client> {
@@ -249,6 +245,7 @@ impl Helper {
     }
 }
 
+/// Return fds that are nonblocking and cloexec
 fn create_pipe() -> io::Result<[RawFd; 2]> {
     let mut pipes = [0; 2];
 
@@ -261,7 +258,9 @@ fn create_pipe() -> io::Result<[RawFd; 2]> {
 
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
-            match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
+            match cvt(unsafe {
+                libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK)
+            }) {
                 Ok(_) => return Ok(pipes),
                 Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
@@ -272,8 +271,12 @@ fn create_pipe() -> io::Result<[RawFd; 2]> {
     }
 
     cvt(unsafe { libc::pipe(pipes.as_mut_ptr()) })?;
-    drop(set_cloexec(pipes[0], true));
-    drop(set_cloexec(pipes[1], true));
+
+    set_cloexec(pipes[0], true)?;
+    set_cloexec(pipes[1], true)?;
+
+    set_nonblocking(pipes[0], true)?;
+    set_nonblocking(pipes[1], true)?;
 
     Ok(pipes)
 }
