@@ -133,6 +133,7 @@ impl Client {
     }
 
     pub fn make_inheritable(&self) -> io::Result<MaybeOwned<'_, Self>> {
+        // Dup automatically reset CLOEXEC flags
         let read = dup(self.read.as_raw_fd())?;
         let write = dup(self.write.as_raw_fd())?;
 
