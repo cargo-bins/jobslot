@@ -285,15 +285,9 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
 }
 
 fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
-    let previous = cvt(unsafe { libc::fcntl(fd, libc::F_GETFD) })?;
-    let new = if set {
-        previous | libc::FD_CLOEXEC
-    } else {
-        previous & !libc::FD_CLOEXEC
-    };
-    if new != previous {
-        cvt(unsafe { libc::fcntl(fd, libc::F_SETFD, new) })?;
-    }
+    // F_GETFD/F_SETFD can only ret/set FD_CLOEXEC
+    let flag = if set { libc::FD_CLOEXEC } else { 0 };
+    cvt(unsafe { libc::fcntl(fd, libc::F_SETFD, flag) })?;
     Ok(())
 }
 
