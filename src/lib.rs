@@ -192,43 +192,6 @@ pub struct Client {
     inner: Arc<imp::Client>,
 }
 
-/// An acquired token from a jobserver.
-///
-/// This token will be released back to the jobserver when it is dropped and
-/// otherwise represents the ability to spawn off another thread of work.
-#[derive(Debug)]
-pub struct Acquired {
-    client: Arc<imp::Client>,
-    data: imp::Acquired,
-    disabled: bool,
-}
-
-impl Acquired {
-    /// This drops the `Acquired` token without releasing the associated token.
-    ///
-    /// This is not generally useful, but can be helpful if you do not have the
-    /// ability to store an Acquired token but need to not yet release it.
-    ///
-    /// You'll typically want to follow this up with a call to `release_raw` or
-    /// similar to actually release the token later on.
-    pub fn drop_without_releasing(mut self) {
-        self.disabled = true;
-    }
-}
-
-#[derive(Default, Debug)]
-struct HelperState {
-    lock: Mutex<HelperInner>,
-    cvar: Condvar,
-}
-
-#[derive(Default, Debug)]
-struct HelperInner {
-    requests: usize,
-    producer_done: bool,
-    consumer_done: bool,
-}
-
 impl Client {
     /// Creates a new jobserver initialized with the given parallelism limit.
     ///
@@ -544,6 +507,30 @@ impl Client {
     }
 }
 
+/// An acquired token from a jobserver.
+///
+/// This token will be released back to the jobserver when it is dropped and
+/// otherwise represents the ability to spawn off another thread of work.
+#[derive(Debug)]
+pub struct Acquired {
+    client: Arc<imp::Client>,
+    data: imp::Acquired,
+    disabled: bool,
+}
+
+impl Acquired {
+    /// This drops the `Acquired` token without releasing the associated token.
+    ///
+    /// This is not generally useful, but can be helpful if you do not have the
+    /// ability to store an Acquired token but need to not yet release it.
+    ///
+    /// You'll typically want to follow this up with a call to `release_raw` or
+    /// similar to actually release the token later on.
+    pub fn drop_without_releasing(mut self) {
+        self.disabled = true;
+    }
+}
+
 impl Drop for Acquired {
     fn drop(&mut self) {
         if !self.disabled {
@@ -594,6 +581,19 @@ impl HelperThread {
         self.0.state.lock().requests += 1;
         self.0.state.cvar.notify_one();
     }
+}
+
+#[derive(Default, Debug)]
+struct HelperState {
+    lock: Mutex<HelperInner>,
+    cvar: Condvar,
+}
+
+#[derive(Default, Debug)]
+struct HelperInner {
+    requests: usize,
+    producer_done: bool,
+    consumer_done: bool,
 }
 
 impl HelperState {
