@@ -294,9 +294,12 @@ fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
 fn set_nonblocking(fd: c_int, set: bool) -> io::Result<()> {
     let status_flag = if set { libc::O_NONBLOCK } else { 0 };
 
-    unsafe {
-        cvt(libc::fcntl(fd, libc::F_SETFL, status_flag))?;
-    }
+    // F_SETFL can only set the O_APPEND, O_ASYNC, O_DIRECT, O_NOATIME, and
+    // O_NONBLOCK flags.
+    //
+    // For pipe, only O_NONBLOCK is meaningful, so it is ok to
+    // not issue a F_GETFL fcntl syscall.
+    cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, status_flag) })?;
 
     Ok(())
 }
