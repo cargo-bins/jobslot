@@ -390,7 +390,7 @@ fn poll_for_readiness2(fds: [RawFd; 2]) -> io::Result<(bool, bool)> {
     ];
 
     loop {
-        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), -1) })?;
+        let ret = poll(&mut fds, -1)?;
         if ret != 0 {
             break;
         }
@@ -409,11 +409,15 @@ fn poll_for_readiness1(fd: RawFd) -> io::Result<()> {
     }];
 
     loop {
-        let ret = cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), -1) })?;
+        let ret = poll(&mut fds, -1)?;
         if ret != 0 && is_ready(fds[0].revents)? {
             break Ok(());
         }
     }
+}
+
+fn poll(fds: &mut [libc::pollfd], timeout: c_int) -> io::Result<c_int> {
+    cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), timeout) })
 }
 
 fn is_ready(revents: libc::c_short) -> io::Result<bool> {
