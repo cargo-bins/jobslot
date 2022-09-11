@@ -164,7 +164,6 @@ impl Client {
 #[derive(Debug)]
 pub struct Helper {
     thread: JoinHandle<()>,
-    state: Arc<super::HelperState>,
     shutdown_tx: File,
 }
 
@@ -181,9 +180,8 @@ pub(crate) fn spawn_helper(
     let mut shutdown_rx = unsafe { File::from_raw_fd(pipes[0]) };
     let shutdown_tx = unsafe { File::from_raw_fd(pipes[1]) };
 
-    let state2 = state.clone();
     let thread = Builder::new().spawn(move || {
-        state2.for_each_request(|helper| {
+        state.for_each_request(|helper| {
             if let Some(res) =
                 helper_thread_loop(helper, &client.inner, &mut shutdown_rx).transpose()
             {
@@ -198,7 +196,6 @@ pub(crate) fn spawn_helper(
 
     Ok(Helper {
         thread,
-        state,
         shutdown_tx,
     })
 }
@@ -228,9 +225,6 @@ fn helper_thread_loop(
 
 impl Helper {
     pub fn join(mut self) {
-        let state = self.state.lock();
-        debug_assert!(state.producer_done);
-
         // We need to join our helper thread, and it could be blocked in one
         // of two locations. First is the wait for a request, but the
         // initial drop of `HelperState` will take care of that. Otherwise
@@ -243,9 +237,7 @@ impl Helper {
         // is alredy terminated.
         let _ = self.shutdown_tx.write(&[1]);
 
-        if state.consumer_done {
-            drop(self.thread.join());
-        }
+        drop(self.thread.join());
     }
 }
 
