@@ -638,9 +638,12 @@ impl HelperState {
     }
 }
 
-#[test]
-fn no_helper_deadlock() {
-    let x = crate::Client::new(32).unwrap();
-    let _y = x.clone();
-    std::mem::drop(x.into_helper_thread(|_| {}).unwrap());
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn no_helper_deadlock() {
+        let x = crate::Client::new(32).unwrap();
+        let _y = x.clone();
+        std::mem::drop(x.into_helper_thread(|_| {}).unwrap());
+    }
 }
