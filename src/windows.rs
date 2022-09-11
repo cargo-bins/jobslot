@@ -55,7 +55,7 @@ impl Client {
             let mut bytes = [0; 4];
             getrandom(&mut bytes)?;
 
-            let mut name = format!("__rust_jobserver_semaphore_{}\0", u32::from_ne_bytes(bytes));
+            let mut name = format!("__rust_jobslot_semaphore_{}\0", u32::from_ne_bytes(bytes));
             let res = unsafe {
                 Handle::new_or_err(CreateSemaphoreA(
                     ptr::null_mut(),
