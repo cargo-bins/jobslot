@@ -177,7 +177,7 @@ pub(crate) fn spawn_helper(
             let res = match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) }
             {
                 WAIT_OBJECT_0 => return,
-                WAIT_OBJECT_1 => Ok(crate::Acquired::new(&client, data: Acquired)),
+                WAIT_OBJECT_1 => Ok(crate::Acquired::new(&client, Acquired)),
                 _ => Err(io::Error::last_os_error()),
             };
             f(res)
