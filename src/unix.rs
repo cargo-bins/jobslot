@@ -241,6 +241,8 @@ impl Helper {
     }
 }
 
+// start of syscalls
+
 /// Return fds that are nonblocking and cloexec
 fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     let mut pipes = [0; 2];
