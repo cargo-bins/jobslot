@@ -178,11 +178,13 @@ pub(crate) fn spawn_helper(
     let thread = Builder::new().spawn(move || {
         let objects = [event2.0.as_ptr(), client.inner.sem.0.as_ptr()];
         state.for_each_request(|_| {
-            match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) } {
+            let res = match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) }
+            {
                 WAIT_OBJECT_0 => return,
-                WAIT_OBJECT_1 => f(Ok(crate::Acquired::new(&client, data: Acquired))),
-                _ => f(Err(io::Error::last_os_error())),
-            }
+                WAIT_OBJECT_1 => Ok(crate::Acquired::new(&client, data: Acquired)),
+                _ => Err(io::Error::last_os_error()),
+            };
+            f(res)
         });
     })?;
     Ok(Helper { thread, event })
