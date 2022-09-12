@@ -180,11 +180,7 @@ pub(crate) fn spawn_helper(
         state.for_each_request(|_| {
             match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) } {
                 WAIT_OBJECT_0 => return,
-                WAIT_OBJECT_1 => f(Ok(crate::Acquired {
-                    client: client.inner.clone(),
-                    data: Acquired,
-                    disabled: false,
-                })),
+                WAIT_OBJECT_1 => f(Ok(crate::Acquired::new(&client, data: Acquired))),
                 _ => f(Err(io::Error::last_os_error())),
             }
         });

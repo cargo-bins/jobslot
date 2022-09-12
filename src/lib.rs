@@ -296,11 +296,7 @@ impl Client {
     /// was not acquired.
     pub fn acquire(&self) -> io::Result<Acquired> {
         let data = self.inner.acquire()?;
-        Ok(Acquired {
-            client: self.inner.clone(),
-            data,
-            disabled: false,
-        })
+        Ok(Acquired::new(self, data))
     }
 
     /// Configures a child process to have access to this client's jobserver as
@@ -513,12 +509,18 @@ impl Client {
 /// otherwise represents the ability to spawn off another thread of work.
 #[derive(Debug)]
 pub struct Acquired {
-    client: Arc<imp::Client>,
+    client: Option<Arc<imp::Client>>,
     data: imp::Acquired,
-    disabled: bool,
 }
 
 impl Acquired {
+    fn new(client: &Client, data: imp::Acquired) -> Self {
+        Self {
+            client: Some(client.inner.clone()),
+            data,
+        }
+    }
+
     /// This drops the `Acquired` token without releasing the associated token.
     ///
     /// This is not generally useful, but can be helpful if you do not have the
@@ -527,14 +529,14 @@ impl Acquired {
     /// You'll typically want to follow this up with a call to `release_raw` or
     /// similar to actually release the token later on.
     pub fn drop_without_releasing(mut self) {
-        self.disabled = true;
+        self.client = None;
     }
 }
 
 impl Drop for Acquired {
     fn drop(&mut self) {
-        if !self.disabled {
-            drop(self.client.release(Some(&self.data)));
+        if let Some(client) = self.client.take() {
+            drop(client.release(Some(&self.data)));
         }
     }
 }
