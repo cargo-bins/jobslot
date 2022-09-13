@@ -130,6 +130,19 @@ pub trait Command {
 
     /// Removes an environment variable mapping.
     fn env_remove<K: AsRef<ffi::OsStr>>(&mut self, key: K) -> &mut Self;
+
+    /// Schedules a closure to be run just before the exec function is invoked.
+    ///
+    /// Check [`std::os::unix::process::CommandExt::pre_exec`]
+    /// for more information.
+    ///
+    /// # Safety
+    ///
+    /// Same as [`std::os::unix::process::CommandExt::pre_exec`].
+    #[cfg(unix)]
+    unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Self
+    where
+        F: FnMut() -> io::Result<()> + Send + Sync + 'static;
 }
 impl Command for process::Command {
     fn env<K, V>(&mut self, key: K, val: V) -> &mut Self
@@ -142,6 +155,15 @@ impl Command for process::Command {
 
     fn env_remove<K: AsRef<ffi::OsStr>>(&mut self, key: K) -> &mut Self {
         process::Command::env_remove(self, key.as_ref())
+    }
+
+    #[cfg(unix)]
+    unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Self
+    where
+        F: FnMut() -> io::Result<()> + Send + Sync + 'static,
+    {
+        use std::os::unix::process::CommandExt;
+        CommandExt::pre_exec(self, f)
     }
 }
 #[cfg(feature = "tokio")]
@@ -157,6 +179,14 @@ impl Command for tokio::process::Command {
     fn env_remove<K: AsRef<ffi::OsStr>>(&mut self, key: K) -> &mut Self {
         tokio::process::Command::env_remove(self, key.as_ref())
     }
+
+    #[cfg(unix)]
+    unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Self
+    where
+        F: FnMut() -> io::Result<()> + Send + Sync + 'static,
+    {
+        tokio::process::Command::pre_exec(self, f)
+    }
 }
 impl<T: Command> Command for &mut T {
     fn env<K, V>(&mut self, key: K, val: V) -> &mut Self
@@ -170,6 +200,15 @@ impl<T: Command> Command for &mut T {
 
     fn env_remove<K: AsRef<ffi::OsStr>>(&mut self, key: K) -> &mut Self {
         (*self).env_remove(key.as_ref());
+        self
+    }
+
+    #[cfg(unix)]
+    unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Self
+    where
+        F: FnMut() -> io::Result<()> + Send + Sync + 'static,
+    {
+        (*self).pre_exec(f);
         self
     }
 }
