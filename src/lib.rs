@@ -118,8 +118,6 @@ cfg_if! {
     }
 }
 
-mod utils;
-
 /// Command that can be accepted by this crate.
 pub trait Command {
     /// Inserts or updates an environment variable mapping.
