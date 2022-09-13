@@ -408,10 +408,11 @@ impl Client {
         Cmd: Command,
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
-        // Setup fd on unix, do nothing on windows.
-        let this = self.inner.make_inheritable()?;
+        // Register one-time callback on unix to unset CLO_EXEC
+        // in child process.
+        self.inner.pre_run(&mut cmd);
 
-        let arg = this.string_arg();
+        let arg = self.inner.string_arg();
         // Older implementations of make use `--jobserver-fds` and newer
         // implementations use `--jobserver-auth`, pass both to try to catch
         // both implementations.
