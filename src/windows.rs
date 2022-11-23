@@ -4,6 +4,7 @@ use std::{
     ffi::CString,
     fmt::Write,
     io,
+    mem::MaybeUninit,
     num::NonZeroIsize,
     ptr,
     sync::Arc,
@@ -115,7 +116,12 @@ impl Client {
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
-        let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle(), INFINITE) };
+        self.acquire_inner(INFINITE)
+    }
+
+    /// * `timeout` - can be `INFINITE` or 0 or any other number.
+    fn acquire_inner(&self, timeout: u32) -> io::Result<Acquired> {
+        let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle(), timeout) };
         if r == WAIT_OBJECT_0 {
             Ok(Acquired)
         } else {
@@ -124,7 +130,24 @@ impl Client {
     }
 
     pub fn release(&self, _data: Option<&Acquired>) -> io::Result<()> {
-        let r = unsafe { ReleaseSemaphore(self.sem.as_raw_handle(), 1, ptr::null_mut()) };
+        self.release_inner(None)
+    }
+
+    fn release_inner(
+        &self,
+        prev_count: Option<&mut MaybeUninit<LONG>>,
+    ) -> io::Result<Option<LONG>> {
+        // SAFETY: ReleaseSemaphore will write to prev_count is it is Some
+        // and release semaphore self.sem by 1.
+        let r = unsafe {
+            ReleaseSemaphore(
+                self.sem.as_raw_handle(),
+                1,
+                prev_count
+                    .map(MaybeUninit::as_mut_ptr)
+                    .unwrap_or_else(ptr::null_mut),
+            )
+        };
         if r != 0 {
             Ok(())
         } else {
@@ -147,20 +170,16 @@ impl Client {
     pub fn available(&self) -> io::Result<usize> {
         // Can't read value of a semaphore on Windows, so
         // try to acquire without sleeping, since we can find out the
-        // old value on release. If acquisiton fails, then available is 0.
-        unsafe {
-            let r = WaitForSingleObject(self.sem.0, 0);
-            if r != WAIT_OBJECT_0 {
-                Ok(0)
-            } else {
-                let mut prev: LONG = 0;
-                let r = ReleaseSemaphore(self.sem.0, 1, &mut prev);
-                if r != 0 {
-                    Ok(prev as usize + 1)
-                } else {
-                    Err(io::Error::last_os_error())
-                }
-            }
+        // old value on release.
+        if self.acquire_inner(0).is_err() {
+            // If acquisiton fails, then available is 0.
+            Ok(0)
+        } else {
+            let mut prev = MaybeUninit::uninit();
+            self.release_inner(Some(&mut prev))?;
+            // SAFETY: release_inner will initialize it
+            let prev: usize = unsafe { prev.assume_init() }.try_into().unwrap();
+            Ok(prev + 1)
         }
     }
 }
