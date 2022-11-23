@@ -185,7 +185,7 @@ pub(crate) fn spawn_helper(
     let event = Arc::new(event);
     let event2 = Arc::clone(&event);
     let thread = Builder::new().spawn(move || {
-        let objects = [event2..as_raw_handle(), client.inner.sem.as_raw_handle()];
+        let objects = [event2.as_raw_handle(), client.inner.sem.as_raw_handle()];
         state.for_each_request(|_| {
             let res = match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) }
             {
