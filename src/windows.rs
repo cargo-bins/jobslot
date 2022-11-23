@@ -174,7 +174,7 @@ impl Client {
         } else {
             let mut prev = MaybeUninit::uninit();
             self.release_inner(Some(&mut prev))?;
-            // SAFETY: release_inner will initialize it
+            // SAFETY: release_inner has initialize it
             let prev: usize = unsafe { prev.assume_init() }.try_into().unwrap();
             Ok(prev + 1)
         }
