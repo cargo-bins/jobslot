@@ -105,7 +105,7 @@ impl Client {
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
-        let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle().as_raw_handle(), INFINITE) };
+        let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle(), INFINITE) };
         if r == WAIT_OBJECT_0 {
             Ok(Acquired)
         } else {
