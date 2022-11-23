@@ -3,15 +3,16 @@ use std::{
     convert::TryInto,
     ffi::CString,
     io,
+    num::NonZeroIsize,
     os::raw::c_void,
-    ptr::{self, NonNull},
+    ptr::{self, null_mut, NonNull},
     sync::Arc,
     thread::{Builder, JoinHandle},
 };
 
 use getrandom::getrandom;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, BOOL, ERROR_ALREADY_EXISTS, HANDLE, WAIT_OBJECT_0},
+    Foundation::{CloseHandle, BOOL, ERROR_ALREADY_EXISTS, HANDLE as RawHandle, WAIT_OBJECT_0},
     System::{
         Threading::{
             CreateEventA, CreateSemaphoreA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects,
@@ -64,7 +65,7 @@ impl Client {
                     ptr::null_mut(),
                     create_limit,
                     create_limit,
-                    name.as_ptr() as *const _,
+                    name.as_ptr(),
                 ))
             };
 
@@ -104,7 +105,7 @@ impl Client {
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
-        let r = unsafe { WaitForSingleObject(self.sem.0.as_ptr(), INFINITE) };
+        let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle().as_raw_handle(), INFINITE) };
         if r == WAIT_OBJECT_0 {
             Ok(Acquired)
         } else {
@@ -113,7 +114,7 @@ impl Client {
     }
 
     pub fn release(&self, _data: Option<&Acquired>) -> io::Result<()> {
-        let r = unsafe { ReleaseSemaphore(self.sem.0.as_ptr(), 1, ptr::null_mut()) };
+        let r = unsafe { ReleaseSemaphore(self.sem.as_raw_handle(), 1, ptr::null_mut()) };
         if r != 0 {
             Ok(())
         } else {
@@ -136,15 +137,19 @@ impl Client {
 
 #[derive(Debug)]
 #[repr(transparent)]
-struct Handle(NonNull<c_void>);
+struct Handle(NonZeroIsize);
 
 impl Handle {
-    unsafe fn new(handle: HANDLE) -> Option<Self> {
-        NonNull::new(handle).map(Self)
+    unsafe fn new(handle: RawHandle) -> Option<Self> {
+        NonZeroIsize::new(handle).map(Self)
     }
 
-    unsafe fn new_or_err(handle: HANDLE) -> Result<Self, io::Error> {
+    unsafe fn new_or_err(handle: RawHandle) -> Result<Self, io::Error> {
         Self::new(handle).ok_or_else(io::Error::last_os_error)
+    }
+
+    fn as_raw_handle(&self) -> RawHandle {
+        self.0.get()
     }
 }
 
@@ -154,7 +159,7 @@ unsafe impl Send for Handle {}
 impl Drop for Handle {
     fn drop(&mut self) {
         unsafe {
-            CloseHandle(self.0.as_ptr());
+            CloseHandle(self.as_raw_handle());
         }
     }
 }
@@ -199,7 +204,7 @@ impl Helper {
         // with a different event that it's also waiting on here. After
         // these two we should be guaranteed the thread is on its way out,
         // so we can safely `join`.
-        let r = unsafe { SetEvent(self.event.0.as_ptr()) };
+        let r = unsafe { SetEvent(self.event.as_raw_handle()) };
         if r == 0 {
             panic!("failed to set event: {}", io::Error::last_os_error());
         }
