@@ -10,20 +10,21 @@ use std::{
 };
 
 use getrandom::getrandom;
-use winapi::{
-    shared::{
-        minwindef::{BOOL, DWORD, FALSE, TRUE},
-        winerror::ERROR_ALREADY_EXISTS,
-    },
-    um::{
-        handleapi::CloseHandle,
-        synchapi::{
-            CreateEventA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
+use windows_sys::Win32::{
+    Foundation::{CloseHandle, BOOL, ERROR_ALREADY_EXISTS, HANDLE, WAIT_OBJECT_0},
+    System::{
+        Threading::{
+            CreateEventA, CreateSemaphoreA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects,
+            WaitForSingleObject, SEMAPHORE_MODIFY_STATE, THREAD_SYNCHRONIZE as SYNCHRONIZE,
         },
-        winbase::{CreateSemaphoreA, OpenSemaphoreA, INFINITE, WAIT_OBJECT_0},
-        winnt::{HANDLE, LONG, SEMAPHORE_MODIFY_STATE, SYNCHRONIZE},
+        WindowsProgramming::{OpenSemaphoreA, INFINITE},
     },
 };
+
+type LONG = i32;
+
+const TRUE: BOOL = 1 as BOOL;
+const FALSE: BOOL = 0 as BOOL;
 
 use crate::Command;
 
