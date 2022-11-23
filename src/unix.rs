@@ -173,7 +173,7 @@ impl Client {
     pub fn available(&self) -> io::Result<usize> {
         let mut len = MaybeUninit::<c_int>::uninit();
         cvt(unsafe { libc::ioctl(self.read.as_raw_fd(), libc::FIONREAD, len.as_mut_ptr()) })?;
-        Ok(unsafe { len.assume_init() } as usize)
+        Ok(unsafe { len.assume_init() }.try_into().unwrap())
     }
 }
 
