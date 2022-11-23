@@ -133,10 +133,7 @@ impl Client {
         self.release_inner(None)
     }
 
-    fn release_inner(
-        &self,
-        prev_count: Option<&mut MaybeUninit<LONG>>,
-    ) -> io::Result<Option<LONG>> {
+    fn release_inner(&self, prev_count: Option<&mut MaybeUninit<LONG>>) -> io::Result<()> {
         // SAFETY: ReleaseSemaphore will write to prev_count is it is Some
         // and release semaphore self.sem by 1.
         let r = unsafe {
