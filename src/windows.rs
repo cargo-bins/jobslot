@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     convert::TryInto,
     ffi::CString,
+    fmt::Write,
     io,
     num::NonZeroIsize,
     ptr,
