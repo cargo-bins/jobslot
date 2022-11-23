@@ -26,7 +26,7 @@ fn server_multiple() {
 
 #[test]
 fn server_available() {
-    let c = t!(Client::new(10));
+    let c = Client::new(10).unwrap();
     assert_eq!(c.available().unwrap(), 10);
     let a = c.acquire().unwrap();
     assert_eq!(c.available().unwrap(), 9);
@@ -36,7 +36,7 @@ fn server_available() {
 
 #[test]
 fn server_none_available() {
-    let c = t!(Client::new(2));
+    let c = Client::new(2).unwrap();
     assert_eq!(c.available().unwrap(), 2);
     let a = c.acquire().unwrap();
     assert_eq!(c.available().unwrap(), 1);
