@@ -4,8 +4,7 @@ use std::{
     ffi::CString,
     io,
     num::NonZeroIsize,
-    os::raw::c_void,
-    ptr::{self, null_mut, NonNull},
+    ptr,
     sync::Arc,
     thread::{Builder, JoinHandle},
 };
@@ -97,7 +96,11 @@ impl Client {
     pub unsafe fn open(s: &str) -> Option<Client> {
         let name = CString::new(s).ok()?;
 
-        let sem = OpenSemaphoreA(SYNCHRONIZE | SEMAPHORE_MODIFY_STATE, FALSE, name.as_ptr());
+        let sem = OpenSemaphoreA(
+            SYNCHRONIZE | SEMAPHORE_MODIFY_STATE,
+            FALSE,
+            name.as_bytes().as_ptr(),
+        );
         Handle::new(sem).map(|sem| Client {
             sem,
             name: s.to_string(),
@@ -182,7 +185,7 @@ pub(crate) fn spawn_helper(
     let event = Arc::new(event);
     let event2 = Arc::clone(&event);
     let thread = Builder::new().spawn(move || {
-        let objects = [event2.0.as_ptr(), client.inner.sem.0.as_ptr()];
+        let objects = [event2..as_raw_handle(), client.inner.sem.as_raw_handle()];
         state.for_each_request(|_| {
             let res = match unsafe { WaitForMultipleObjects(2, objects.as_ptr(), FALSE, INFINITE) }
             {
