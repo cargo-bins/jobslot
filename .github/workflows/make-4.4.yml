@@ -25,7 +25,7 @@ jobs:
       - name: Make GNU Make from source
         if: steps.cache-make.outputs.cache-hit != 'true'
         run: |
-          curl "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar x
+          curl "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar xz
           pushd "make-${MAKE_VERSION}"
           ./configure
           make -j "$(nproc)"
