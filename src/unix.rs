@@ -111,10 +111,9 @@ impl Client {
             let read = dup_with_cloexec(read).ok()?;
             let write = dup_with_cloexec(write).ok()?;
 
-            // Set read to nonblocking
+            // Set read and write end to nonblocking
             set_nonblocking(read, true).ok()?;
-            // Set write to blocking
-            set_nonblocking(write, false).ok()?;
+            set_nonblocking(write, true).ok()?;
 
             Some(Client::from_fds(read, write))
         } else {
@@ -160,8 +159,17 @@ impl Client {
     pub fn release(&self, data: Option<&Acquired>) -> io::Result<()> {
         // Note that the fd may be nonblocking but we're going to go ahead
         // and assume that the writes here are always nonblocking (we can
-        // always quickly release a token). If that turns out to not be the
-        // case we'll get an error anyway!
+        // always quickly release a token).
+        //
+        // For write to block, this would mean that pipe is full.
+        // If all every release are pair with an acquire, then this cannot
+        // happen.
+        //
+        // If it does happen, it is likely a bug in the program using this
+        // crate or some other programs that use the same jobserver have a
+        // bug in their  code
+        //
+        // If that turns out to not be the case we'll get an error anyway!
         let byte = data.map(|d| d.byte).unwrap_or(b'+');
         match (&self.write).write(&[byte])? {
             1 => Ok(()),
