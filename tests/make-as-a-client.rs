@@ -65,7 +65,9 @@ bar:
 
     // We're leaking one extra token to `make` sort of violating the makefile
     // jobserver protocol. It has the desired effect though.
-    let mut child = c.configure_and_run(&mut cmd, |cmd| cmd.spawn()).unwrap();
+    let mut child = c
+        .configure_make_and_run(&mut cmd, |cmd| cmd.spawn())
+        .unwrap();
 
     // We should get both connections as the two programs should be run
     // concurrently.
