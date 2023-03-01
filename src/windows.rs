@@ -130,7 +130,7 @@ impl Client {
         );
         Handle::new(sem).map(|sem| Client {
             sem,
-            name: s.to_string(),
+            name: s.into(),
         })
     }
 
