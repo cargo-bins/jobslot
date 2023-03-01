@@ -82,7 +82,7 @@ impl Client {
 
         if is_pipe_without_access_mode_check(file.as_raw_fd()) {
             // File in Rust is always closed-on-exec as long as it's opened by
-            // libstd itself.
+            // `File::open` or `fs::OpenOptions::open`.
             set_nonblocking(file.as_raw_fd(), true).ok()?;
 
             Some(Client {
