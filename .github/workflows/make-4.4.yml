@@ -6,7 +6,7 @@ env:
   MAKE_VERSION: "4.4.1"
 
 jobs:
-  test:
+  test-make-4.4:
     name: Test using make 4.4.1
     runs-on: ${{ matrix.os }}
     strategy:
