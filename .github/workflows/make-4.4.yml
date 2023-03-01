@@ -15,11 +15,11 @@ jobs:
         rust: [stable, beta, nightly]
     steps:
       - name: Cache make compiled
-      id: cache-make
-      uses: actions/cache@v3
-      with:
-        path: /usr/local/bin/make
-        key: ${{ runner.os }}-make-${{ env.MAKE_VERSION }}
+        id: cache-make
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/bin/make
+          key: ${{ runner.os }}-make-${{ env.MAKE_VERSION }}
 
       # Compile it from source (temporarily)
       - name: Make GNU Make from source
