@@ -65,9 +65,6 @@ impl Client {
             limit -= n;
         }
 
-        // Set fd to be blocking
-        set_nonblocking(client.write.as_raw_fd(), false)?;
-
         Ok(client)
     }
 
