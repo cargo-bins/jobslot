@@ -270,10 +270,27 @@ impl Client {
     ///
     /// Returns an error if any I/O error happens when attempting to create the
     /// jobserver client.
-    pub fn new(limit: usize) -> io::Result<Client> {
-        Ok(Client {
-            inner: Arc::new(imp::Client::new(limit)?),
-        })
+    pub fn new(limit: usize) -> io::Result<Self> {
+        imp::Client::new(limit).map(Self::new_inner)
+    }
+
+    /// Same as [`Client::new`] except that it will create a named fifo on
+    /// unix so that you can use ....
+    pub fn new_with_fifo(limit: usize) -> io::Result<Self> {
+        #[cfg(unix)]
+        {
+            imp::Client::new_fifo(limit).map(Self::new_inner)
+        }
+        #[cfg(not(unix))]
+        {
+            Self::new(limit)
+        }
+    }
+
+    fn new_inner(client: imp::Client) -> Self {
+        Self {
+            inner: Arc::new(client),
+        }
     }
 
     /// Attempts to connect to the jobserver specified in this process's
@@ -315,7 +332,7 @@ impl Client {
     ///
     /// Note, though, that on Windows and Unix it should be safe to
     /// call this function any number of times.
-    pub unsafe fn from_env() -> Option<Client> {
+    pub unsafe fn from_env() -> Option<Self> {
         let var = env::var_os("CARGO_MAKEFLAGS")
             .or_else(|| env::var_os("MAKEFLAGS"))
             .or_else(|| env::var_os("MFLAGS"))?;
