@@ -468,11 +468,15 @@ impl Client {
 
     /// Same as [`Client::configure_and_run`] except that it tries to pass
     /// `--jobserver-auth=fifo:/path/to/fifo` to pass path to fifo instead of
-    /// fds and it does not pass `--jobserver-fds=r,w` and will fallback to
-    /// [`Client::configure_and_run`] if the client is not created using
-    /// [`Client::new_with_fifo`] or [`Client::from_env`] with
-    /// `CARGO_MAKEFLAGS`/`MAKEFLAGS`/`MFLAGS` containing
+    /// fds and it does not pass `--jobserver-fds=r,w` on unix and will
+    /// fallback to [`Client::configure_and_run`] if the client is not
+    /// created using [`Client::new_with_fifo`] or [`Client::from_env`]
+    /// with `CARGO_MAKEFLAGS`/`MAKEFLAGS`/`MFLAGS` containing
     /// `--jobserver-auth=fifo:/path/to/fifo`.
+    ///
+    /// On windows, [`Client`] always uses a named semaphore and on wasm,
+    /// such API is not supported since spawning processes is not supported
+    /// by wasm yet.
     ///
     /// Using this function will break backwards compatibility for
     /// some programs, e.g. make < `4.4`.
