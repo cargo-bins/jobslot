@@ -330,7 +330,6 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
 
 fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     // F_GETFD/F_SETFD can only ret/set FD_CLOEXEC
-    //   which gives better performance on unix since it can use vfork.
     let flag = if set { libc::FD_CLOEXEC } else { 0 };
     cvt(unsafe { libc::fcntl(fd, libc::F_SETFD, flag) })?;
     Ok(())
