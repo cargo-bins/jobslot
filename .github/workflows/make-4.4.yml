@@ -28,7 +28,7 @@ jobs:
           curl "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar xz
           pushd "make-${MAKE_VERSION}"
           ./configure
-          make -j "$(nproc)"
+          make
           popd
           cp -rp "make-${MAKE_VERSION}/make" /usr/local/bin
 
