@@ -17,7 +17,12 @@
 //! in communication on Unix, which is supported by this crate.
 //!
 //! However, [`Client::configure_and_run`] and [`Client::configure_make_and_run`]
-//! still use the old syntax to keep backwards compatibility.
+//! still use the old syntax to keep backwards compatibility with existing
+//! programs, e.g. make < 4.4.
+//!
+//! To create a new fifo on unix, use [`Client::new_with_fifo`] and to use it
+//! for spawning process, use [`Client::configure_and_run_with_fifo`] or
+//! [`Client::configure_make_and_run_with_fifo`].
 //!
 //! The jobserver protocol in `make` also dictates when tokens are acquired to
 //! run child work, and clients using this crate should take care to implement
@@ -228,6 +233,28 @@ impl<T: Command> Command for &mut T {
     }
 }
 
+/// Returns RAII to ensure env_remove is called on unwinding
+fn setup_envs<'a, Cmd>(
+    mut cmd: Cmd,
+    envs: &'a [&'a str],
+    value: &ffi::OsStr,
+) -> ScopeGuard<Cmd, impl FnOnce(Cmd) + 'a>
+where
+    Cmd: Command,
+{
+    // Setup env
+    for env in envs {
+        cmd.env(env, value);
+    }
+
+    // Use RAII to ensure env_remove is called on unwinding
+    guard(cmd, move |mut cmd| {
+        for env in envs {
+            cmd.env_remove(env);
+        }
+    })
+}
+
 /// A client of a jobserver
 ///
 /// This structure is the main type exposed by this library, and is where
@@ -275,7 +302,9 @@ impl Client {
     }
 
     /// Same as [`Client::new`] except that it will create a named fifo on
-    /// unix so that you can use ....
+    /// unix so that you can use [`Client::configure_and_run_with_fifo`] or
+    /// [`Client::configure_make_and_run_with_fifo`] to pass the fifo
+    /// instead of fds.
     pub fn new_with_fifo(limit: usize) -> io::Result<Self> {
         #[cfg(unix)]
         {
@@ -406,31 +435,9 @@ impl Client {
         self.configure_and_run_inner(cmd, f, &["CARGO_MAKEFLAGS"])
     }
 
-    /// Configures a child process to have access to this client's jobserver as
-    /// well and run the `f` which spawns the process.
-    ///
-    /// NOTE that you have to spawn the process inside `f`, otherwise the jobserver
-    /// would not be inherited.
-    ///
-    /// This function is required to be called to ensure that a jobserver is
-    /// properly inherited to a child process. If this function is *not* called
-    /// then this `Client` will not be accessible in the child process. In other
-    /// words, if not called, then `Client::from_env` will return `None` in the
-    /// child process (or the equivalent of `Child::from_env` that `make` uses).
-    ///
-    /// ## Environment variables
-    ///
-    /// This function sets up `CARGO_MAKEFLAGS`, `MAKEFLAGS` and `MFLAGS`,
-    /// which is used by `cargo` and `make`.
-    ///
-    /// ## Platform-specific behavior
-    ///
-    /// On Unix and Windows this will clobber the `CARGO_MAKEFLAGS`,
-    /// `MAKEFLAGS` and `MFLAGS` environment variables for the child process,
-    /// and on Unix this will also allow the two file descriptors for
-    /// this client to be inherited to the child.
-    ///
-    /// On platforms other than Unix and Windows this panics.
+    /// Same as [`Client::configure_and_run`] except that it sets up environment
+    /// variables `CARGO_MAKEFLAGS`, `MAKEFLAGS` and `MFLAGS`, which is used by
+    /// `cargo` and `make`.
     pub fn configure_make_and_run<Cmd, F, R>(&self, cmd: Cmd, f: F) -> io::Result<R>
     where
         Cmd: Command,
@@ -454,19 +461,72 @@ impl Client {
         // both implementations.
         let value = format!("-j --jobserver-fds={0} --jobserver-auth={0}", arg);
 
-        // Setup env
-        for env in envs {
-            cmd.env(env, &value);
-        }
-
-        // Use RAII to ensure env_remove is called on unwinding
-        let mut cmd = guard(cmd, |mut cmd| {
-            for env in envs {
-                cmd.env_remove(env);
-            }
-        });
+        let mut cmd = setup_envs(cmd, envs, &ffi::OsStr::new(&value));
 
         f(&mut cmd)
+    }
+
+    /// Same as [`Client::configure_and_run`] except that it tries to pass
+    /// `--jobserver-auth=fifo:/path/to/fifo` to pass path to fifo instead of
+    /// fds and it does not pass `--jobserver-fds=r,w` and will fallback to
+    /// [`Client::configure_and_run`] if the client is not created using
+    /// [`Client::new_with_fifo`] or [`Client::from_env`] with
+    /// `CARGO_MAKEFLAGS`/`MAKEFLAGS`/`MFLAGS` containing
+    /// `--jobserver-auth=fifo:/path/to/fifo`.
+    ///
+    /// Using this function will break backwards compatibility for
+    /// some programs, e.g. make < `4.4`.
+    ///
+    /// Using this method does provide better performance since it doesn't need
+    /// to call [`Command::pre_run`] to register a callback to run in the new
+    /// process and thus can use vfork + exec for better performance.
+    pub fn configure_and_run_with_fifo<Cmd, F, R>(&self, cmd: Cmd, f: F) -> io::Result<R>
+    where
+        Cmd: Command,
+        F: FnOnce(&mut Cmd) -> io::Result<R>,
+    {
+        self.configure_and_run_with_fifo_inner(cmd, f, &["CARGO_MAKEFLAGS"])
+    }
+
+    /// Same as [`Client::configure_and_run_with_fifo`] except that it sets up
+    /// environment variables `CARGO_MAKEFLAGS`, `MAKEFLAGS` and `MFLAGS`,
+    /// which is used by `cargo` and `make`.
+    pub fn configure_make_and_run_with_fifo<Cmd, F, R>(&self, cmd: Cmd, f: F) -> io::Result<R>
+    where
+        Cmd: Command,
+        F: FnOnce(&mut Cmd) -> io::Result<R>,
+    {
+        self.configure_and_run_with_fifo_inner(cmd, f, &["CARGO_MAKEFLAGS", "MAKEFLAGS", "MFLAGS"])
+    }
+
+    fn configure_and_run_with_fifo_inner<Cmd, F, R>(
+        &self,
+        cmd: Cmd,
+        f: F,
+        envs: &[&str],
+    ) -> io::Result<R>
+    where
+        Cmd: Command,
+        F: FnOnce(&mut Cmd) -> io::Result<R>,
+    {
+        #[cfg(unix)]
+        {
+            if let Some(path) = self.inner.get_fifo() {
+                let path = path.as_os_str();
+
+                let prefix = "-j --jobserver-auth=";
+
+                let mut value = ffi::OsString::with_capacity(prefix.len() + path.len());
+                value.push(prefix);
+                value.push(path);
+
+                let mut cmd = setup_envs(cmd, envs, &value);
+
+                return f(&mut cmd);
+            }
+        }
+
+        self.configure_and_run_inner(cmd, f, envs)
     }
 
     /// Converts this `Client` into a helper thread to deal with a blocking

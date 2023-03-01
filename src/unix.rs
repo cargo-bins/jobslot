@@ -67,14 +67,20 @@ impl Client {
         // but don't try for too long.
         let prefix = "/tmp/__rust_jobslot_fifo_";
 
-        let mut name = prefix.to_string();
-        name.reserve(16);
+        let mut name = String::with_capacity(
+            prefix.len() +
+            // 32B for the max size of u128
+            32 +
+            // 1B for the null byte
+            1,
+        );
+        name.push_str(prefix);
 
         for _ in 0..100 {
             let mut bytes = [0; 16];
             getrandom(&mut bytes)?;
 
-            write!(&mut name, "{}\0", u128::from_ne_bytes(bytes)).unwrap();
+            write!(&mut name, "{:x}\0", u128::from_ne_bytes(bytes)).unwrap();
 
             let res = cvt(unsafe {
                 libc::mkfifo(name.as_ptr() as *const _, libc::S_IRUSR | libc::S_IWUSR)
@@ -267,6 +273,10 @@ impl Client {
             self.read.as_raw_fd(),
             self.write.as_raw_fd()
         ))
+    }
+
+    pub fn get_fifo(&self) -> Option<&Path> {
+        self.path.as_deref()
     }
 
     pub fn pre_run<Cmd>(&self, cmd: &mut Cmd)
