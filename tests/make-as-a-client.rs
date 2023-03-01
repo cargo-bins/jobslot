@@ -22,7 +22,7 @@ fn main() {
 
     if let Ok(s) = env::var("TEST_ADDR") {
         let mut contents = Vec::new();
-        TcpStream::connect(&s)
+        TcpStream::connect(s)
             .unwrap()
             .read_to_end(&mut contents)
             .unwrap();
@@ -37,7 +37,7 @@ fn main() {
     let me = env::current_exe().unwrap();
     let me = me.to_str().unwrap();
 
-    let mut cmd = Command::new(&me);
+    let mut cmd = Command::new(me);
     cmd.current_dir(td.path());
     cmd.env("MAKE", prog);
     cmd.env("_DO_THE_TEST", "1");
