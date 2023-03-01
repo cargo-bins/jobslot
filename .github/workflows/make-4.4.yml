@@ -1,4 +1,4 @@
-name: CI
+name: test make-4.4
 on: [push, pull_request]
 
 env:
@@ -6,7 +6,7 @@ env:
   MAKE_VERSION: "4.4.1"
 
 jobs:
-  test-make-4.4:
+  test:
     name: Test using make 4.4.1
     runs-on: ${{ matrix.os }}
     strategy:
