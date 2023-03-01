@@ -73,6 +73,7 @@ impl Client {
         }
     }
 
+    /// `--jobserver-auth=fifo:PATH`
     fn from_fifo(path: &Path) -> Option<Self> {
         let file = fs::OpenOptions::new()
             .read(true)
@@ -94,6 +95,7 @@ impl Client {
         }
     }
 
+    /// `--jobserver-auth=fd-for-R,fd-for-W`
     unsafe fn from_pipe(s: &str) -> Option<Self> {
         let (read, write) = s.split_once(',')?;
 
