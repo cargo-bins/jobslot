@@ -26,9 +26,5 @@ jobs:
           # which works better when we provide it with GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: |
-          set -euxo pipefail
-          # Some dev-dependencies require a newer version of Rust, but it doesn't matter for MSRV check
-          # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`
-          sed 's/\[dev-dependencies\]/[workaround-avoid-dev-deps]/g' ./Cargo.toml >Cargo.toml.tmp
-          mv Cargo.toml.tmp ./Cargo.toml
+          ./avoid-dev-deps.sh
           cargo check --all-features
