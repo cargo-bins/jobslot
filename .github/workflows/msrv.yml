@@ -11,6 +11,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust
@@ -22,4 +25,10 @@ jobs:
           # cache-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: cargo check --all-features
+      - run: |
+          set -euxo pipefail
+          # Some dev-dependencies require a newer version of Rust, but it doesn't matter for MSRV check
+          # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`
+          sed 's/\[dev-dependencies\]/[workaround-avoid-dev-deps]/g' ./Cargo.toml >Cargo.toml.tmp
+          mv Cargo.toml.tmp ./Cargo.toml
+          cargo check --all-features
