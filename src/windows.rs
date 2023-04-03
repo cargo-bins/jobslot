@@ -17,9 +17,10 @@ use windows_sys::Win32::{
     System::{
         Threading::{
             CreateEventA, CreateSemaphoreA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects,
-            WaitForSingleObject, SEMAPHORE_MODIFY_STATE, THREAD_SYNCHRONIZE as SYNCHRONIZE,
+            WaitForSingleObject, INFINITE, SEMAPHORE_MODIFY_STATE,
+            THREAD_SYNCHRONIZE as SYNCHRONIZE,
         },
-        WindowsProgramming::{OpenSemaphoreA, INFINITE},
+        WindowsProgramming::OpenSemaphoreA,
     },
 };
 
