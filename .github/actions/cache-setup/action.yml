@@ -1,0 +1,24 @@
+name: Setup cacheing
+
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: sccache
+    - name: Configure sccache
+      uses: actions/github-script@v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+    - name: Export env for sccache to work
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
+    - uses: webiny/action-post-run@3.0.0
+      id: post-run-command
+      with:
+        run: sccache --show-stats
