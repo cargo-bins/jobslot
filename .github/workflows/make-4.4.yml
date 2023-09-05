@@ -43,9 +43,7 @@ jobs:
         run: |
           rustup toolchain add ${{ matrix.rust }} --no-self-update
           rustup default ${{ matrix.rust }}
-      - uses: ./.github/actions/cache-setup
-        env:
-          # cache-setup use binstall to install sccache,
-          # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Cargo.lock
+        run: cargo update
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
