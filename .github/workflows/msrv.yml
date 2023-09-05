@@ -20,11 +20,14 @@ jobs:
         run: |
           rustup toolchain add 1.58 nightly --no-self-update
           rustup default 1.58
+      - name: Use minimal version
+        run: |
+          ./avoid-dev-deps.sh
+          cargo +nightly -Zminimal-versions update
       - uses: ./.github/actions/cache-setup
         env:
           # cache-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: |
-          ./avoid-dev-deps.sh
           cargo check --all-features
