@@ -38,7 +38,7 @@ jobs:
       - name: Verify that we are using make 4.4.1
         run: make -v | grep "GNU Make ${MAKE_VERSION}"
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Rust
         run: |
           rustup toolchain add ${{ matrix.rust }} --no-self-update
