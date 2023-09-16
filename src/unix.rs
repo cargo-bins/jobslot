@@ -453,7 +453,8 @@ fn set_nonblocking(fd: c_int, set: bool) -> io::Result<()> {
 }
 
 fn dup(fd: c_int) -> io::Result<c_int> {
-    cvt(unsafe { libc::dup(fd) })
+    // EINTR
+    cvt_retry_on_interrupt(move || unsafe { libc::dup(fd) })
 }
 
 fn dup_with_cloexec(fd: RawFd) -> io::Result<RawFd> {
@@ -484,6 +485,15 @@ fn cvt(t: c_int) -> io::Result<c_int> {
         Err(io::Error::last_os_error())
     } else {
         Ok(t)
+    }
+}
+
+fn cvt_retry_on_interrupt(f: impl Fn() -> c_int) -> io::Result<c_int> {
+    loop {
+        match cvt(f()) {
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            res => break res,
+        }
     }
 }
 
@@ -565,7 +575,9 @@ fn poll_for_readiness1(fd: RawFd) -> io::Result<()> {
 }
 
 fn poll(fds: &mut [libc::pollfd], timeout: c_int) -> io::Result<c_int> {
-    cvt(unsafe { libc::poll(fds.as_mut_ptr(), fds.len().try_into().unwrap(), timeout) })
+    let nfds: libc::nfds_t = fds.len().try_into().unwrap();
+    let fds = fds.as_mut_ptr();
+    cvt_retry_on_interrupt(move || unsafe { libc::poll(fds, nfds, timeout) })
 }
 
 fn is_ready(revents: libc::c_short) -> io::Result<bool> {
