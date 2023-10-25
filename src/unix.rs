@@ -412,15 +412,17 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     // with as many kernels/glibc implementations as possible.
     #[cfg(target_os = "linux")]
     {
+        use std::sync::{AtomicBool, Ordering::Relaxed};
+
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
-        if PIPE2_AVAILABLE.load(Ordering::Relaxed) {
+        if PIPE2_AVAILABLE.load(Relaxed) {
             let flags = libc::O_CLOEXEC | if nonblocking { libc::O_NONBLOCK } else { 0 };
             match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), flags) }) {
                 Ok(_) => return Ok(pipes),
                 Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
                 // err.raw_os_error() == Some(libc::ENOSYS)
-                _ => PIPE2_AVAILABLE.store(false, Ordering::Relaxed),
+                _ => PIPE2_AVAILABLE.store(false, Relaxed),
             }
         }
     }
