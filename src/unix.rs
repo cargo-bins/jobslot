@@ -5,16 +5,13 @@ use std::{
     fmt::Write as _,
     fs::{self, File},
     io::{self, Read, Write},
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     os::unix::{
         ffi::{OsStrExt, OsStringExt},
         prelude::*,
     },
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     thread::{Builder, JoinHandle},
 };
 
@@ -22,16 +19,6 @@ use getrandom::getrandom;
 use libc::c_int;
 
 use crate::Command;
-
-/// Lowest file descriptor used in `Selector::try_clone`.
-///
-/// # Notes
-///
-/// Usually fds 0, 1 and 2 are standard in, out and error. Some application
-/// blindly assume this to be true, which means using any one of those a select
-/// could result in some interesting and unexpected errors. Avoid that by using
-/// an fd that doesn't have a pre-determined usage.
-const LOWEST_FD: libc::c_int = 3;
 
 #[derive(Debug)]
 pub struct Client {
@@ -95,7 +82,7 @@ impl Client {
 
                     // File in Rust is always closed-on-exec as long as it's opened by
                     // `File::open` or `fs::OpenOptions::open`.
-                    set_nonblocking(file.as_raw_fd(), true)?;
+                    set_nonblocking(file.as_raw_fd())?;
 
                     let client = Self {
                         read: file.try_clone()?,
@@ -165,10 +152,10 @@ impl Client {
     fn from_fifo(path: &Path) -> Option<Self> {
         let file = open_file_rw(path).ok()?;
 
-        if is_pipe_without_access_mode_check(file.as_raw_fd()) {
+        if is_pipe(&file)? {
             // File in Rust is always closed-on-exec as long as it's opened by
             // `File::open` or `fs::OpenOptions::open`.
-            set_nonblocking(file.as_raw_fd(), true).ok()?;
+            set_nonblocking(file.as_raw_fd()).ok()?;
 
             Some(Self {
                 read: file.try_clone().ok()?,
@@ -188,6 +175,9 @@ impl Client {
         let read = read.parse().ok()?;
         let write = write.parse().ok()?;
 
+        let read = ManuallyDrop::new(File::from_raw_fd(read));
+        let write = ManuallyDrop::new(File::from_raw_fd(write));
+
         // Ok so we've got two integers that look like file descriptors, but
         // for extra sanity checking let's see if they actually look like
         // instances of a pipe before we return the client.
@@ -195,17 +185,33 @@ impl Client {
         // If we're called from `make` *without* the leading + on our rule
         // then we'll have `MAKEFLAGS` env vars but won't actually have
         // access to the file descriptors.
-        if is_pipe(read, true) && is_pipe(write, false) {
-            let read = dup_with_cloexec(read).ok()?;
-            let write = dup_with_cloexec(write).ok()?;
+        match (
+            is_pipe(&read),
+            is_pipe(&write),
+            get_access_mode(&read),
+            get_access_mode(&write),
+        ) {
+            (
+                Some(true),
+                Some(true),
+                Some(libc::O_RDONLY) | Some(libc::O_RDWR),
+                Some(libc::O_WRONLY) | Some(libc::O_RDWR),
+            ) => {
+                let read = read.try_clone().ok()?;
+                let write = write.try_clone().ok()?;
 
-            // Set read and write end to nonblocking
-            set_nonblocking(read, true).ok()?;
-            set_nonblocking(write, true).ok()?;
+                // Set read and write end to nonblocking
+                set_nonblocking(read.as_raw_fd()).ok()?;
+                set_nonblocking(write.as_raw_fd()).ok()?;
 
-            Some(Self::from_fds(read, write))
-        } else {
-            None
+                Some(Self {
+                    read,
+                    write,
+                    path: None,
+                    owns_fifo: false,
+                })
+            }
+            _ => None,
         }
     }
 
@@ -425,8 +431,8 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     set_cloexec(pipes[1], true)?;
 
     if nonblocking {
-        set_nonblocking(pipes[0], true)?;
-        set_nonblocking(pipes[1], true)?;
+        set_nonblocking(pipes[0])?;
+        set_nonblocking(pipes[1])?;
     }
 
     Ok(pipes)
@@ -439,45 +445,15 @@ fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     Ok(())
 }
 
-fn set_nonblocking(fd: c_int, set: bool) -> io::Result<()> {
-    let status_flag = if set { libc::O_NONBLOCK } else { 0 };
-
+fn set_nonblocking(fd: c_int) -> io::Result<()> {
     // F_SETFL can only set the O_APPEND, O_ASYNC, O_DIRECT, O_NOATIME, and
     // O_NONBLOCK flags.
     //
     // For pipe, only O_NONBLOCK is meaningful, so it is ok to
     // not issue a F_GETFL fcntl syscall.
-    cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, status_flag) })?;
+    cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) })?;
 
     Ok(())
-}
-
-fn dup(fd: c_int) -> io::Result<c_int> {
-    // EINTR
-    cvt_retry_on_interrupt(move || unsafe { libc::dup(fd) })
-}
-
-fn dup_with_cloexec(fd: RawFd) -> io::Result<RawFd> {
-    static F_DUPFD_CLOEXEC_AVAILBILITY: AtomicBool = AtomicBool::new(true);
-
-    if F_DUPFD_CLOEXEC_AVAILBILITY.load(Ordering::Relaxed) {
-        match cvt(unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, LOWEST_FD) }) {
-            Err(err)
-                if err.raw_os_error() == Some(libc::ENOSYS)
-                // If the flag F_DUPFD_CLOEXEC is invalid, then it might
-                // return EINVAL.
-                || err.raw_os_error() == Some(libc::EINVAL) =>
-            {
-                F_DUPFD_CLOEXEC_AVAILBILITY.store(false, Ordering::Relaxed)
-            }
-            res => return res,
-        }
-    }
-
-    // Fallback to dup + set_cloexec
-    let new_fd = dup(fd)?;
-    set_cloexec(new_fd, true)?;
-    Ok(new_fd)
 }
 
 fn cvt(t: c_int) -> io::Result<c_int> {
@@ -497,38 +473,17 @@ fn cvt_retry_on_interrupt(f: impl Fn() -> c_int) -> io::Result<c_int> {
     }
 }
 
-fn is_pipe_without_access_mode_check(fd: RawFd) -> bool {
-    let mut stat = MaybeUninit::<libc::stat>::uninit();
-
-    if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } == -1 {
-        return false;
-    }
-
-    // Safety:
-    //
-    // libc::fstat succeeds, stat is initialized
-    let stat = unsafe { stat.assume_init() };
-    (stat.st_mode & libc::S_IFMT) == libc::S_IFIFO
+fn is_pipe(file: &File) -> Option<bool> {
+    Some(file.metadata().ok()?.file_type().is_fifo())
 }
 
-fn is_pipe(fd: RawFd, readable: bool) -> bool {
-    if !is_pipe_without_access_mode_check(fd) {
-        return false;
-    }
-
-    let ret = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+fn get_access_mode(file: &File) -> Option<c_int> {
+    let ret = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
     if ret == -1 {
-        return false;
+        return None;
     }
 
-    let status_flags = ret;
-    let access_mode = if readable {
-        libc::O_RDONLY
-    } else {
-        libc::O_WRONLY
-    };
-
-    (status_flags & libc::O_ACCMODE) == access_mode
+    Some(ret & libc::O_ACCMODE)
 }
 
 /// NOTE that this is a blocking syscall, it will block
