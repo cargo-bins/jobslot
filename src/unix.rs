@@ -412,7 +412,7 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     // with as many kernels/glibc implementations as possible.
     #[cfg(target_os = "linux")]
     {
-        use std::sync::{AtomicBool, Ordering::Relaxed};
+        use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Relaxed) {
