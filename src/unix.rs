@@ -253,10 +253,6 @@ impl Client {
     }
 
     pub fn release(&self, data: Option<&Acquired>) -> io::Result<()> {
-        // Note that the fd may be nonblocking but we're going to go ahead
-        // and assume that the writes here are always nonblocking (we can
-        // always quickly release a token).
-        //
         // For write to block, this would mean that pipe is full.
         // If all every release are pair with an acquire, then this cannot
         // happen.
