@@ -1,15 +1,12 @@
 use std::{
     borrow::Cow,
     convert::TryInto,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fmt::Write as _,
     fs::{self, File},
     io::{self, Read, Write},
     mem::{ManuallyDrop, MaybeUninit},
-    os::unix::{
-        ffi::{OsStrExt, OsStringExt},
-        prelude::*,
-    },
+    os::unix::{ffi::OsStrExt, prelude::*},
     path::{Path, PathBuf},
     sync::Arc,
     thread::{Builder, JoinHandle},
@@ -130,21 +127,11 @@ impl Client {
         Ok(())
     }
 
-    pub unsafe fn open(var: OsString) -> Option<Self> {
-        let bytes = var.into_vec();
-
-        let s = bytes
-            .split(u8::is_ascii_whitespace)
-            .filter_map(|arg| {
-                arg.strip_prefix(b"--jobserver-fds=")
-                    .or_else(|| arg.strip_prefix(b"--jobserver-auth="))
-            })
-            .find(|bytes| !bytes.is_empty())?;
-
-        if let Some(fifo) = s.strip_prefix(b"fifo:") {
+    pub unsafe fn open(var: &[u8]) -> Option<Self> {
+        if let Some(fifo) = var.strip_prefix(b"fifo:") {
             Self::from_fifo(Path::new(OsStr::from_bytes(fifo)))
         } else {
-            Self::from_pipe(OsStr::from_bytes(s).to_str()?)
+            Self::from_pipe(OsStr::from_bytes(var).to_str()?)
         }
     }
 

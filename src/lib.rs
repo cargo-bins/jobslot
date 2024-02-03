@@ -366,7 +366,37 @@ impl Client {
             .or_else(|| env::var_os("MAKEFLAGS"))
             .or_else(|| env::var_os("MFLAGS"))?;
 
-        imp::Client::open(var).map(|c| Client { inner: Arc::new(c) })
+        let var = {
+            cfg_if! {
+                if #[cfg(unix)] {
+                    std::os::unix::ffi::OsStrExt::as_bytes(var.as_os_str())
+                } else {
+                    var.to_str()?.as_bytes()
+                }
+            }
+        };
+        let makeflags = var.split(u8::is_ascii_whitespace);
+
+        // `--jobserver-auth=` is the only documented makeflags.
+        // `--jobserver-fds=` is actually an internal only makeflags, so we should
+        // always prefer `--jobserver-auth=`.
+        //
+        // Also, according to doc of makeflags, if there are multiple `--jobserver-auth=`
+        // the last one is used
+        if let Some(flag) = makeflags
+            .clone()
+            .filter_map(|s| s.strip_prefix(b"--jobserver-auth="))
+            .last()
+        {
+            imp::Client::open(flag)
+        } else {
+            imp::Client::open(
+                makeflags
+                    .filter_map(|s| s.strip_prefix(b"--jobserver-fds="))
+                    .last()?,
+            )
+        }
+        .map(|c| Client { inner: Arc::new(c) })
     }
 
     /// Acquires a token from this jobserver client.
@@ -775,6 +805,7 @@ impl HelperState {
         self.cvar.notify_one();
     }
 
+    #[cfg(not(windows))]
     fn producer_done(&self) -> bool {
         self.lock().producer_done
     }
