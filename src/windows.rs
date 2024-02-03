@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     convert::TryInto,
-    ffi::{CString, OsString},
+    ffi::CString,
     fmt::Write,
     io,
     mem::MaybeUninit,
@@ -112,26 +112,17 @@ impl Client {
         ))
     }
 
-    pub unsafe fn open(var: OsString) -> Option<Client> {
-        let s = var
-            .to_str()?
-            .split_ascii_whitespace()
-            .filter_map(|arg| {
-                arg.strip_prefix("--jobserver-fds=")
-                    .or_else(|| arg.strip_prefix("--jobserver-auth="))
-            })
-            .find(|s| !s.is_empty())?;
-
-        let name = CString::new(s).ok()?;
+    pub unsafe fn open(var: &[u8]) -> Option<Client> {
+        let name = String::from_utf8_lossy(var);
 
         let sem = OpenSemaphoreA(
             SYNCHRONIZE | SEMAPHORE_MODIFY_STATE,
             FALSE,
-            name.as_bytes().as_ptr(),
+            CString::new(var).ok()?.as_bytes().as_ptr(),
         );
         Handle::new(sem).map(|sem| Client {
             sem,
-            name: s.into(),
+            name: name.into(),
         })
     }
 
