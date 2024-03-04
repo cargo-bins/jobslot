@@ -283,6 +283,7 @@ impl Client {
             // Client.
             for fd in fds.take().iter().flatten() {
                 set_cloexec(*fd, false)?;
+                set_blocking(*fd)?;
             }
 
             Ok(())
@@ -430,15 +431,19 @@ fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     Ok(())
 }
 
-fn set_nonblocking(fd: c_int) -> io::Result<()> {
-    // F_SETFL can only set the O_APPEND, O_ASYNC, O_DIRECT, O_NOATIME, and
-    // O_NONBLOCK flags.
-    //
-    // For pipe, only O_NONBLOCK is meaningful, so it is ok to
-    // not issue a F_GETFL fcntl syscall.
-    cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) })?;
+fn set_fd_flags(fd: c_int, flags: c_int) -> io::Result<()> {
+    // Safety: F_SETFL takes one and exactly one c_int flags.
+    cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, flags) })?;
 
     Ok(())
+}
+
+fn set_nonblocking(fd: c_int) -> io::Result<()> {
+    set_fd_flags(fd, libc::O_NONBLOCK)
+}
+
+fn set_blocking(fd: c_int) -> io::Result<()> {
+    set_fd_flags(fd, 0)
 }
 
 fn cvt(t: c_int) -> io::Result<c_int> {
