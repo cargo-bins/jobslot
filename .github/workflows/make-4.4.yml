@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-14]
         rust: [stable, beta, nightly]
     defaults:
       run:
@@ -22,7 +22,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/make
-          key: ${{ runner.os }}-make-${{ env.MAKE_VERSION }}
+          key: ${{ matrix.os }}-make-${{ env.MAKE_VERSION }}
 
       # Compile it from source (temporarily)
       - name: Make GNU Make from source
