@@ -22,7 +22,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/make
-          key: ${{ runner.os }}-make-${{ env.MAKE_VERSION }}
+          key: ${{ matrix.os }}-make-${{ env.MAKE_VERSION }}
 
       # Compile it from source (temporarily)
       - name: Make GNU Make from source
