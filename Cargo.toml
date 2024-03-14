@@ -83,7 +83,3 @@ required-features = ["tokio"]
 name = "make-as-a-client"
 path = "tests/make-as-a-client.rs"
 harness = false
-
-[[test]]
-name = "helper"
-path = "tests/helper.rs"

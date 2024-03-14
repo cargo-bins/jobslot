@@ -8,8 +8,6 @@ use std::{
     mem::{ManuallyDrop, MaybeUninit},
     os::unix::{ffi::OsStrExt, prelude::*},
     path::{Path, PathBuf},
-    sync::Arc,
-    thread::{Builder, JoinHandle},
 };
 
 use getrandom::getrandom;
@@ -37,7 +35,7 @@ pub struct Acquired {
 impl Client {
     pub fn new(limit: usize) -> io::Result<Self> {
         // Create nonblocking and cloexec pipes
-        let pipes = create_pipe(true)?;
+        let pipes = create_pipe()?;
 
         let client = unsafe { Self::from_fds(pipes[0], pipes[1]) };
 
@@ -76,10 +74,6 @@ impl Client {
                     let name = PathBuf::from(name);
 
                     let file = open_file_rw(&name)?;
-
-                    // File in Rust is always closed-on-exec as long as it's opened by
-                    // `File::open` or `fs::OpenOptions::open`.
-                    set_nonblocking(file.as_raw_fd())?;
 
                     let client = Self {
                         read: file.try_clone()?,
@@ -140,10 +134,6 @@ impl Client {
         let file = open_file_rw(path).ok()?;
 
         if is_pipe(&file)? {
-            // File in Rust is always closed-on-exec as long as it's opened by
-            // `File::open` or `fs::OpenOptions::open`.
-            set_nonblocking(file.as_raw_fd()).ok()?;
-
             Some(Self {
                 read: file.try_clone().ok()?,
                 write: file,
@@ -186,10 +176,6 @@ impl Client {
             ) => {
                 let read = read.try_clone().ok()?;
                 let write = write.try_clone().ok()?;
-
-                // Set read and write end to nonblocking
-                set_nonblocking(read.as_raw_fd()).ok()?;
-                set_nonblocking(write.as_raw_fd()).ok()?;
 
                 Some(Self {
                     read,
@@ -283,7 +269,6 @@ impl Client {
             // Client.
             for fd in fds.take().iter().flatten() {
                 set_cloexec(*fd, false)?;
-                set_blocking(*fd)?;
             }
 
             Ok(())
@@ -309,86 +294,10 @@ impl Drop for Client {
     }
 }
 
-#[derive(Debug)]
-pub struct Helper {
-    thread: JoinHandle<()>,
-    shutdown_tx: File,
-}
-
-pub(crate) fn spawn_helper(
-    client: crate::Client,
-    state: Arc<super::HelperState>,
-    mut f: Box<dyn FnMut(io::Result<crate::Acquired>) + Send>,
-) -> io::Result<Helper> {
-    // Create cloexec pipes but not nonblocking, since we would never
-    // read from it and we would only write 1 and exactly 1 byte
-    // into it.
-    let pipes = create_pipe(false)?;
-
-    let mut shutdown_rx = unsafe { File::from_raw_fd(pipes[0]) };
-    let shutdown_tx = unsafe { File::from_raw_fd(pipes[1]) };
-
-    let thread = Builder::new().spawn(move || {
-        state.for_each_request(|helper| {
-            if let Some(res) =
-                helper_thread_loop(helper, &client.inner, &mut shutdown_rx).transpose()
-            {
-                f(res.map(|data| crate::Acquired::new(&client, data)))
-            }
-        });
-    })?;
-
-    Ok(Helper {
-        thread,
-        shutdown_tx,
-    })
-}
-
-fn helper_thread_loop(
-    helper: &crate::HelperState,
-    client: &Client,
-    shutdown_rx: &mut File,
-) -> io::Result<Option<Acquired>> {
-    let fds = [client.read.as_raw_fd(), shutdown_rx.as_raw_fd()];
-
-    loop {
-        if helper.producer_done() {
-            break Ok(None);
-        }
-
-        let (can_acquire, shutdown_requested) = poll_for_readiness2(fds)?;
-        if shutdown_requested {
-            break Ok(None);
-        } else if can_acquire {
-            if let Some(acquire) = client.acquire_allow_interrupts()? {
-                break Ok(Some(acquire));
-            }
-        }
-    }
-}
-
-impl Helper {
-    pub fn join(mut self) {
-        // We need to join our helper thread, and it could be blocked in one
-        // of two locations. First is the wait for a request, but the
-        // initial drop of `HelperState` will take care of that. Otherwise
-        // it may be blocked in `client.acquire()`.
-        //
-        // Since we use `poll` in the helper thread, we can simply write to
-        // shutdown_tx to end the thread.
-        //
-        // If somehow this fails, then it means that the other thread
-        // is alredy terminated.
-        let _ = self.shutdown_tx.write(&[1]);
-
-        drop(self.thread.join());
-    }
-}
-
 // start of syscalls
 
 /// Return fds that are nonblocking and cloexec
-fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
+fn create_pipe() -> io::Result<[RawFd; 2]> {
     let mut pipes = [0; 2];
 
     // Attempt atomically-create-with-cloexec if we can on Linux,
@@ -400,8 +309,7 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
 
         static PIPE2_AVAILABLE: AtomicBool = AtomicBool::new(true);
         if PIPE2_AVAILABLE.load(Relaxed) {
-            let flags = libc::O_CLOEXEC | if nonblocking { libc::O_NONBLOCK } else { 0 };
-            match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), flags) }) {
+            match cvt(unsafe { libc::pipe2(pipes.as_mut_ptr(), libc::O_CLOEXEC) }) {
                 Ok(_) => return Ok(pipes),
                 Err(err) if err.raw_os_error() != Some(libc::ENOSYS) => return Err(err),
 
@@ -416,11 +324,6 @@ fn create_pipe(nonblocking: bool) -> io::Result<[RawFd; 2]> {
     set_cloexec(pipes[0], true)?;
     set_cloexec(pipes[1], true)?;
 
-    if nonblocking {
-        set_nonblocking(pipes[0])?;
-        set_nonblocking(pipes[1])?;
-    }
-
     Ok(pipes)
 }
 
@@ -431,6 +334,7 @@ fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     Ok(())
 }
 
+/*
 fn set_fd_flags(fd: c_int, flags: c_int) -> io::Result<()> {
     // Safety: F_SETFL takes one and exactly one c_int flags.
     cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, flags) })?;
@@ -444,7 +348,7 @@ fn set_nonblocking(fd: c_int) -> io::Result<()> {
 
 fn set_blocking(fd: c_int) -> io::Result<()> {
     set_fd_flags(fd, 0)
-}
+    }*/
 
 fn cvt(t: c_int) -> io::Result<c_int> {
     if t == -1 {
@@ -474,32 +378,6 @@ fn get_access_mode(file: &File) -> Option<c_int> {
     }
 
     Some(ret & libc::O_ACCMODE)
-}
-
-/// NOTE that this is a blocking syscall, it will block
-/// until one of the fd is ready.
-fn poll_for_readiness2(fds: [RawFd; 2]) -> io::Result<(bool, bool)> {
-    let mut fds = [
-        libc::pollfd {
-            fd: fds[0],
-            events: libc::POLLIN,
-            revents: 0,
-        },
-        libc::pollfd {
-            fd: fds[1],
-            events: libc::POLLIN,
-            revents: 0,
-        },
-    ];
-
-    loop {
-        let ret = poll(&mut fds, -1)?;
-        if ret != 0 {
-            break;
-        }
-    }
-
-    Ok((is_ready(fds[0].revents)?, is_ready(fds[1].revents)?))
 }
 
 /// NOTE that this is a blocking syscall, it will block

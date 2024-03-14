@@ -78,28 +78,3 @@ impl Client {
         Ok(*lock)
     }
 }
-
-#[derive(Debug)]
-pub struct Helper {
-    thread: JoinHandle<()>,
-}
-
-pub(crate) fn spawn_helper(
-    client: crate::Client,
-    state: Arc<super::HelperState>,
-    mut f: Box<dyn FnMut(io::Result<crate::Acquired>) + Send>,
-) -> io::Result<Helper> {
-    let thread = Builder::new().spawn(move || {
-        state.for_each_request(|_| f(client.acquire()));
-    })?;
-
-    Ok(Helper { thread })
-}
-
-impl Helper {
-    pub fn join(self) {
-        // TODO: this is not correct if the thread is blocked in
-        // `client.acquire()`.
-        drop(self.thread.join());
-    }
-}
