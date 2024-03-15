@@ -174,6 +174,21 @@ impl Client {
                 Some(libc::O_RDONLY) | Some(libc::O_RDWR),
                 Some(libc::O_WRONLY) | Some(libc::O_RDWR),
             ) => {
+                // Optimization: Try converting it to a fifo by using /dev/fd
+                //
+                // On linux, opening `/dev/fd/$fd` returns a fd with a new file description,
+                // so we can set `O_NONBLOCK` on it without affecting other processes.
+                //
+                // On macOS, opening `/dev/fd/$fd` seems to be the same as `File::try_clone`.
+                //
+                // I tested this on macOS 14 and Linux 6.5.13
+                #[cfg(target_os = "linux")]
+                if let Ok(Some(jobserver)) =
+                    Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
+                {
+                    return Ok(Some(jobserver));
+                }
+
                 let read = read.try_clone().ok()?;
                 let write = write.try_clone().ok()?;
 
