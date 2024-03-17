@@ -32,13 +32,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        run: |
-          rustup toolchain add 1.58 --no-self-update --target wasm32-wasi
-          rustup default stable
       - name: Use minimal version and create Cargo.lock
         run: |
           ./avoid-dev-deps.sh
           cargo +nightly -Zminimal-versions update
+      - name: Install Rust
+        run: |
+          rustup toolchain add 1.58 --no-self-update --target wasm32-wasi
+          rustup default stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --target wasm32-wasi
