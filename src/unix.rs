@@ -186,7 +186,7 @@ impl Client {
                 if let Ok(Some(jobserver)) =
                     Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
                 {
-                    return Ok(Some(jobserver));
+                    return Some(jobserver);
                 }
 
                 let read = read.try_clone().ok()?;
