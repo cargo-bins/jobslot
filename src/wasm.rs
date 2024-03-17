@@ -87,7 +87,7 @@ impl Client {
             Poll::Pending
         } else {
             *lock -= 1;
-            Poll::Ready(Ok(Some(Acquired(()))))
+            Poll::Ready(Ok(Acquired(())))
         }
     }
 
