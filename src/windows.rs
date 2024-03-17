@@ -1,37 +1,26 @@
 use std::{
-    borrow::Cow,
-    convert::TryInto,
-    ffi::CString,
-    fmt::Write,
-    io,
-    mem::MaybeUninit,
-    num::NonZeroIsize,
-    ptr,
-    sync::Arc,
-    thread::{Builder, JoinHandle},
+    borrow::Cow, convert::TryInto, ffi::CString, fmt::Write, io, mem::MaybeUninit,
+    num::NonZeroIsize, ptr,
 };
 
 use getrandom::getrandom;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, BOOL, ERROR_ALREADY_EXISTS, HANDLE as RawHandle, WAIT_OBJECT_0},
+    Foundation::{
+        CloseHandle, ERROR_ALREADY_EXISTS, FALSE, HANDLE as RawHandle, WAIT_ABANDONED, WAIT_FAILED,
+        WAIT_OBJECT_0, WAIT_TIMEOUT,
+    },
     System::{
         Threading::{
-            CreateEventA, CreateSemaphoreA, ReleaseSemaphore, SetEvent, WaitForMultipleObjects,
-            WaitForSingleObject, INFINITE, SEMAPHORE_MODIFY_STATE,
-            THREAD_SYNCHRONIZE as SYNCHRONIZE,
+            CreateSemaphoreA, ReleaseSemaphore, WaitForSingleObject, INFINITE,
+            SEMAPHORE_MODIFY_STATE, THREAD_SYNCHRONIZE as SYNCHRONIZE,
         },
         WindowsProgramming::OpenSemaphoreA,
     },
 };
 
-type LONG = i32;
-
-const TRUE: BOOL = 1 as BOOL;
-const FALSE: BOOL = 0 as BOOL;
-
 use crate::Command;
 
-const WAIT_OBJECT_1: u32 = WAIT_OBJECT_0 + 1;
+type LONG = i32;
 
 #[derive(Debug)]
 pub struct Client {

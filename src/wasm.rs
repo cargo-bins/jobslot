@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     io,
     sync::{Arc, Condvar, Mutex},
-    thread::{Builder, JoinHandle},
 };
 
 use crate::Command;

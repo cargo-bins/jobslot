@@ -671,10 +671,13 @@ which will break make < `4.4`."#,
 
             #[cfg(unix)]
             Self::IoError(io_error) => write!(f, "io error: {}", io_error),
+
+            _ => unreachable!(),
         }
     }
 }
 
+#[cfg(unix)]
 impl From<io::Error> for IntoTryAcquireClientError {
     fn from(io_error: io::Error) -> Self {
         Self::IoError(io_error)
@@ -727,6 +730,7 @@ impl TryAcquireClient {
     /// Get back to [`Client`], return `Err` if clearing `O_NONBLOCK` fails.
     pub fn into_inner(self) -> io::Result<Client> {
         let client = self.destructure().0;
+        #[cfg(unix)]
         client.inner.set_blocking()?;
         Ok(client)
     }
@@ -734,6 +738,7 @@ impl TryAcquireClient {
 
 impl Drop for TryAcquireClient {
     fn drop(&mut self) {
+        #[cfg(unix)]
         let _ = self.0.inner.set_blocking();
     }
 }
