@@ -30,7 +30,7 @@ impl Client {
         })
     }
 
-    pub unsafe fn open(_s: &str) -> Option<Client> {
+    pub unsafe fn open(_s: &[u8]) -> Option<Client> {
         None
     }
 
@@ -50,10 +50,10 @@ impl Client {
     pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
         let mut lock = self.inner.count.lock().unwrap_or_else(|e| e.into_inner());
         if *lock == 0 {
-            None
+            Ok(None)
         } else {
             *lock -= 1;
-            Ok(Acquired(()))
+            Ok(Some(Acquired(())))
         }
     }
 
