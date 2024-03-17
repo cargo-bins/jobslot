@@ -137,9 +137,9 @@ cfg_if! {
     }
 }
 
-#[cfg(all(feature = "tokio", unix))]
+#[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
 mod async_client;
-#[cfg(all(feature = "tokio", unix))]
+#[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
 pub use async_client::AsyncAcquireClient;
 
 /// Command that can be accepted by this crate.
@@ -588,7 +588,7 @@ impl Client {
     /// Get [`TryAcquireClient`], which supports non-blocking acquire.
     pub fn into_try_acquire_client(self) -> Result<TryAcquireClient, IntoTryAcquireClientError> {
         #[cfg(unix)]
-        let res = {
+        return {
             // Construct `TryAcquireClient` here, in case `set_nonblocking`
             // failed, its dtor would set it back to blocking.
             let client = TryAcquireClient(self);
@@ -602,9 +602,7 @@ impl Client {
         };
 
         #[cfg(not(unix))]
-        let res = Ok(TryAcquireClient(self));
-
-        res
+        return Ok(TryAcquireClient(self));
     }
 }
 

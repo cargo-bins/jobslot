@@ -6,36 +6,56 @@ use std::{
     task::{Context, Poll},
 };
 
+#[cfg(unix)]
 use tokio::io::{unix::AsyncFd, Interest};
 
 use crate::{Acquired, TryAcquireClient};
 
+#[cfg(unix)]
+type AsyncAcquireClientInner = AsyncFd<TryAcquireClient>;
+
+#[cfg(not(unix))]
+type AsyncAcquireClientInner = TryAcquireClient;
+
 /// Extension of [`Client`] that supports async acquire.
 #[derive(Debug)]
-pub struct AsyncAcquireClient(AsyncFd<TryAcquireClient>);
+pub struct AsyncAcquireClient(AsyncAcquireClientInner);
 
 impl ops::Deref for AsyncAcquireClient {
     type Target = TryAcquireClient;
 
     fn deref(&self) -> &Self::Target {
-        self.0.get_ref()
+        #[cfg(unix)]
+        return self.0.get_ref();
+
+        #[cfg(not(unix))]
+        return &self.0;
     }
 }
 
 impl AsyncAcquireClient {
     /// Create async acquire client
     pub fn new(try_acquire_client: TryAcquireClient) -> io::Result<Self> {
-        AsyncFd::with_interest(try_acquire_client, Interest::READABLE).map(Self)
+        #[cfg(unix)]
+        return AsyncFd::with_interest(try_acquire_client, Interest::READABLE).map(Self);
+
+        #[cfg(not(unix))]
+        return Ok(Self(try_acquire_client));
     }
 
     /// Deregisters and returns [`TryAcquireClient`]
     pub fn into_inner(self) -> TryAcquireClient {
-        self.0.into_inner()
+        #[cfg(unix)]
+        return self.0.into_inner();
+
+        #[cfg(not(unix))]
+        return self.0;
     }
 
     /// Async poll version of [`crate::Client::acquire`]
     pub fn poll_acquire(&self, cx: &mut Context<'_>) -> Poll<io::Result<Acquired>> {
-        loop {
+        #[cfg(unix)]
+        return loop {
             let mut ready_guard = match self.0.poll_read_ready(cx) {
                 Poll::Pending => break Poll::Pending,
                 Poll::Ready(res) => res?,
@@ -46,7 +66,13 @@ impl AsyncAcquireClient {
             } else {
                 ready_guard.clear_ready();
             }
-        }
+        };
+
+        #[cfg(not(unix))]
+        return self
+            .inner
+            .poll_acquire(cx)
+            .map_ok(|data| Acquired::new(&self.0, data));
     }
 
     /// Async version of [`crate::Client::acquire`]
