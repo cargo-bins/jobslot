@@ -119,7 +119,7 @@
 // the `docsrs` configuration attribute is defined
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{env, ffi, io, process, sync::Arc};
+use std::{env, error::Error as StdError, ffi, fmt, io, ops, process, sync::Arc};
 
 use cfg_if::cfg_if;
 use scopeguard::{guard, ScopeGuard};
@@ -579,6 +579,27 @@ impl Client {
         self.inner.release(None)?;
         Ok(())
     }
+
+    /// Get [`TryAcquireClient`], which supports non-blocking acquire.
+    pub fn into_try_acquire_client(self) -> Result<TryAcquireClient, IntoTryAcquireClientError> {
+        #[cfg(unix)]
+        let res = if self.inner.is_try_acquire_safe() {
+            // Construct `TryAcquireClient` here, in case `set_nonblocking`
+            // failed, its dtor would set it back to blocking.
+            let client = TryAcquireClient(self);
+            client.0.inner.set_nonblocking()?;
+            Ok(client)
+        } else {
+            Err(IntoTryAcquireClientError::IncompatibleWithOlderMake(
+                TryAcquireClient(self),
+            ))
+        };
+
+        #[cfg(not(unix))]
+        let res = Ok(TryAcquireClient(self));
+
+        res
+    }
 }
 
 /// An acquired token from a jobserver.
@@ -616,5 +637,95 @@ impl Drop for Acquired {
         if let Some(client) = self.client.take() {
             drop(client.release(Some(&self.data)));
         }
+    }
+}
+
+/// Possible errors for [`Client::into_try_acquire_client`]
+#[derive(Debug)]
+pub enum IntoTryAcquireClientError {
+    /// The jobserver uses annoymous pipe, [`TryAcquireClient::try_acquire`]
+    /// requires setting `O_NONBLOCK`, since annoymous pipe is passed by fd,
+    /// it will affect all processes using the annoymous pipe,
+    /// which will break make < `4.4`.
+    ///
+    /// If you know that no make < `4.4` is spawned when [`TryAcquireClient`],
+    /// then you can simply unwrap this error and continue.
+    #[cfg(unix)]
+    IncompatibleWithOlderMake(TryAcquireClient),
+
+    /// Setting `O_NONBLOCK` failed.
+    #[cfg(unix)]
+    IoError(io::Error),
+}
+
+impl fmt::Display for IntoTryAcquireClientError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(unix)]
+            Self::IncompatibleWithOlderMake(_) => f.write_str(
+                r#"The jobserver uses annoymous pipe, `TryAcquireClient` will set `O_NONBLOCK`,
+since annoymous pipe is passed by fd, it will affect all processes using the annoymous pipe,
+which will break make < `4.4`."#,
+            ),
+
+            #[cfg(unix)]
+            Self::IoError(io_error) => write!(f, "io error: {}", io_error),
+        }
+    }
+}
+
+impl From<io::Error> for IntoTryAcquireClientError {
+    fn from(io_error: io::Error) -> Self {
+        Self::IoError(io_error)
+    }
+}
+
+impl StdError for IntoTryAcquireClientError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            #[cfg(unix)]
+            Self::IoError(io_error) => Some(io_error),
+            _ => None,
+        }
+    }
+}
+
+/// Extension of [`Client`] that supports non-blocking acquire.
+#[derive(Clone, Debug)]
+pub struct TryAcquireClient(Client);
+
+impl ops::Deref for TryAcquireClient {
+    type Target = Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryAcquireClient {
+    /// Similar to [`Client::acquire`], but returns `Ok(None)`
+    /// instead of bocking, if there is no token available.
+    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
+        match self.0.inner.try_acquire() {
+            Ok(Some(data)) => Ok(Some(Acquired::new(&self.0, data))),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Similar to [`Client::acquire_raw`], but returns `Ok(None)`
+    /// instead of blocking, if there is no token available.
+    pub fn try_acquire_raw(&self) -> io::Result<Option<()>> {
+        match self.0.inner.try_acquire() {
+            Ok(Some(_)) => Ok(Some(())),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl Drop for TryAcquireClient {
+    fn drop(&mut self) {
+        let _ = self.0.inner.set_blocking();
     }
 }
