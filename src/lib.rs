@@ -137,6 +137,11 @@ cfg_if! {
     }
 }
 
+#[cfg(all(feature = "tokio", unix))]
+mod async_client;
+#[cfg(all(feature = "tokio", unix))]
+pub use async_client::AsyncAcquireClient;
+
 /// Command that can be accepted by this crate.
 pub trait Command {
     /// Inserts or updates an environment variable mapping.
@@ -747,54 +752,5 @@ impl Drop for TryAcquireClient {
 impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.0.inner.get_read_fd()
-    }
-}
-
-/// Extension of [`Client`] that supports async acquire.
-#[cfg(all(feature = "tokio", unix))]
-#[derive(Debug)]
-pub struct AsyncAcquireClient(tokio::io::unix::AsyncFd<TryAcquireClient>);
-
-#[cfg(all(feature = "tokio", unix))]
-impl ops::Deref for AsyncAcquireClient {
-    type Target = TryAcquireClient;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.get_ref()
-    }
-}
-
-#[cfg(all(feature = "tokio", unix))]
-impl AsyncAcquireClient {
-    /// Create async acquire client
-    pub fn new(try_acquire_client: TryAcquireClient) -> io::Result<Self> {
-        tokio::io::unix::AsyncFd::with_interest(try_acquire_client, tokio::io::Interest::READABLE)
-            .map(Self)
-    }
-
-    /// Deregisters and returns [`TryAcquireClient`]
-    pub fn into_inner(self) -> TryAcquireClient {
-        self.0.into_inner()
-    }
-
-    /// Polling function for acquire operation.
-    pub fn poll_acquire(
-        &self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<io::Result<Acquired>> {
-        use std::task::Poll;
-
-        loop {
-            let mut ready_guard = match self.0.poll_read_ready(cx) {
-                Poll::Pending => break Poll::Pending,
-                Poll::Ready(res) => res?,
-            };
-
-            if let Some(acquired) = self.try_acquire()? {
-                break Poll::Ready(Ok(acquired));
-            } else {
-                ready_guard.clear_ready();
-            }
-        }
     }
 }
