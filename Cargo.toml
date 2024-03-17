@@ -29,6 +29,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 cfg-if = "1.0.0"
 tokio = { version = "1", default-features = false, features = [
     "process",
+    "net",
 ], optional = true }
 scopeguard = "1.1.0"
 derive_destructure2 = "0.1.2"

@@ -246,6 +246,10 @@ impl Client {
         self.acquire_allow_interrupts()
     }
 
+    pub fn get_read_fd(&self) -> RawFd {
+        self.read.as_raw_fd()
+    }
+
     pub fn release(&self, data: Option<&Acquired>) -> io::Result<()> {
         // For write to block, this would mean that pipe is full.
         // If all every release are pair with an acquire, then this cannot
