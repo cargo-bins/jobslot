@@ -241,6 +241,11 @@ impl Client {
         }
     }
 
+    /// `set_nonblocking` must be called prior to this call
+    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
+        self.acquire_allow_interrupts()
+    }
+
     pub fn release(&self, data: Option<&Acquired>) -> io::Result<()> {
         // For write to block, this would mean that pipe is full.
         // If all every release are pair with an acquire, then this cannot
@@ -311,11 +316,6 @@ impl Client {
     pub fn set_blocking(&self) -> io::Result<()> {
         set_blocking(self.read.as_raw_fd())?;
         set_blocking(self.write.as_raw_fd())
-    }
-
-    /// `set_nonblocking` must be called prior to this call
-    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
-        self.acquire_allow_interrupts()
     }
 }
 

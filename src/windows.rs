@@ -127,17 +127,34 @@ impl Client {
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
-        self.acquire_inner(INFINITE)
+        self.acquire_inner(INFINITE).map(|res| {
+            res.expect("With timeout set to infinite, WAIT_TIMEOUT should not be returned")
+        })
     }
 
     /// * `timeout` - can be `INFINITE` or 0 or any other number.
-    fn acquire_inner(&self, timeout: u32) -> io::Result<Acquired> {
+    fn acquire_inner(&self, timeout: u32) -> io::Result<Option<Acquired>> {
         let r = unsafe { WaitForSingleObject(self.sem.as_raw_handle(), timeout) };
-        if r == WAIT_OBJECT_0 {
-            Ok(Acquired)
-        } else {
-            Err(io::Error::last_os_error())
+
+        match r {
+            WAIT_OBJECT_0 => Ok(Some(Acquired)),
+            WAIT_TIMEOUT => Ok(None),
+            WAIT_FAILED => Err(io::Error::last_os_error()),
+            // We believe this should be impossible for a semaphore, but still
+            // check the error code just in case it happens.
+            WAIT_ABANDONED => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Wait on jobserver semaphore returned WAIT_ABANDONED",
+            )),
+            ret => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Unexpected return value `{ret:#01x}` from WaitForSingleObject"),
+            )),
         }
+    }
+
+    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
+        self.acquire_inner(0)
     }
 
     pub fn release(&self, _data: Option<&Acquired>) -> io::Result<()> {
@@ -179,15 +196,14 @@ impl Client {
         // Can't read value of a semaphore on Windows, so
         // try to acquire without sleeping, since we can find out the
         // old value on release.
-        if self.acquire_inner(0).is_err() {
-            // If acquisiton fails, then available is 0.
-            Ok(0)
-        } else {
+        if self.acquire_inner(0)?.is_some() {
             let mut prev = MaybeUninit::uninit();
             self.release_inner(Some(&mut prev))?;
             // SAFETY: release_inner has initialized it
             let prev: usize = unsafe { prev.assume_init() }.try_into().unwrap();
             Ok(prev + 1)
+        } else {
+            Ok(0)
         }
     }
 }
