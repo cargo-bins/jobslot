@@ -214,12 +214,12 @@ impl Client {
 
     pub fn acquire(&self) -> io::Result<Acquired> {
         loop {
-            poll_for_readiness1(self.read.as_raw_fd())?;
-
-            // Ignore EINTR or EAGAIN and keep trying if that happens
+            // Ignore EAGAIN and keep trying if that happens
             if let Some(token) = self.acquire_allow_interrupts()? {
                 return Ok(token);
             }
+
+            poll_for_readiness1(self.read.as_raw_fd())?;
         }
     }
 
