@@ -183,7 +183,7 @@ impl Client {
                 //
                 // I tested this on macOS 14 and Linux 6.5.13
                 #[cfg(target_os = "linux")]
-                if let Ok(Some(jobserver)) =
+                if let Some(jobserver) =
                     Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
                 {
                     return Some(jobserver);
