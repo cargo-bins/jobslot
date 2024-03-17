@@ -70,6 +70,9 @@ impl AsyncAcquireClient {
 
         #[cfg(not(unix))]
         return self
+            .0
+             .0
+             .0
             .inner
             .poll_acquire(cx)
             .map_ok(|data| Acquired::new(&self.0, data));

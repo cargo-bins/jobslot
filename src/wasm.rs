@@ -1,17 +1,12 @@
 use std::{
     borrow::Cow,
     io,
-    sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError},
+    sync::{Condvar, Mutex, MutexGuard, PoisonError},
     task::{Context, Poll, Waker},
 };
 
 #[derive(Debug)]
 pub struct Client {
-    inner: Arc<Inner>,
-}
-
-#[derive(Debug)]
-struct Inner {
     count: Mutex<usize>,
     cvar: Condvar,
     wakers: Mutex<Vec<Waker>>,
@@ -23,11 +18,9 @@ pub struct Acquired(());
 impl Client {
     pub fn new(limit: usize) -> io::Result<Client> {
         Ok(Client {
-            inner: Arc::new(Inner {
-                count: Mutex::new(limit),
-                cvar: Condvar::new(),
-                wakers: Mutex::default(),
-            }),
+            count: Mutex::new(limit),
+            cvar: Condvar::new(),
+            wakers: Mutex::default(),
         })
     }
 
@@ -36,20 +29,13 @@ impl Client {
     }
 
     fn count(&self) -> MutexGuard<'_, usize> {
-        self.inner
-            .count
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.count.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn acquire(&self) -> io::Result<Acquired> {
         let mut lock = self.count();
         while *lock == 0 {
-            lock = self
-                .inner
-                .cvar
-                .wait(lock)
-                .unwrap_or_else(PoisonError::into_inner);
+            lock = self.cvar.wait(lock).unwrap_or_else(PoisonError::into_inner);
         }
         *lock -= 1;
         Ok(Acquired(()))
@@ -66,10 +52,7 @@ impl Client {
     }
 
     fn wakers(&self) -> MutexGuard<'_, Vec<Waker>> {
-        self.inner
-            .wakers
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.wakers.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn poll_acquire(&self, cx: &mut Context<'_>) -> Poll<io::Result<Acquired>> {
@@ -79,7 +62,7 @@ impl Client {
             // Obtain wakers within critical section of count,
             // to make sure no one else can release any token
             // until our waker is added, otherwise it is possible
-            // for release to be called without waking us up.
+            // to release token without waking us up.
             //
             // Afterwards, anyone who release the token will
             // wake us up.
@@ -102,7 +85,7 @@ impl Client {
         //
         // It's ok to not hold the lock of count, the worst case scenario
         // is they will add themselves back to the queue again.
-        self.inner.cvar.notify_one();
+        self.cvar.notify_one();
         self.wakers().drain(..).for_each(Waker::wake);
 
         Ok(())

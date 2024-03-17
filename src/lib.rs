@@ -340,6 +340,7 @@ impl Client {
     fn new_inner(inner: imp::Client) -> Self {
         Self(Arc::new(ClientInner {
             inner,
+            #[cfg(unix)]
             acitve_try_acquire_client_count: Mutex::default(),
         }))
     }
