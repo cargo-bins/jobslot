@@ -583,16 +583,17 @@ impl Client {
     /// Get [`TryAcquireClient`], which supports non-blocking acquire.
     pub fn into_try_acquire_client(self) -> Result<TryAcquireClient, IntoTryAcquireClientError> {
         #[cfg(unix)]
-        let res = if self.inner.is_try_acquire_safe() {
+        let res = {
             // Construct `TryAcquireClient` here, in case `set_nonblocking`
             // failed, its dtor would set it back to blocking.
             let client = TryAcquireClient(self);
             client.0.inner.set_nonblocking()?;
-            Ok(client)
-        } else {
-            Err(IntoTryAcquireClientError::IncompatibleWithOlderMake(
-                TryAcquireClient(self),
-            ))
+
+            if client.inner.is_try_acquire_safe() {
+                Ok(client)
+            } else {
+                Err(IntoTryAcquireClientError::IncompatibleWithOlderMake(client))
+            }
         };
 
         #[cfg(not(unix))]
