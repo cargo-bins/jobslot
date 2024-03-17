@@ -174,6 +174,21 @@ impl Client {
                 Some(libc::O_RDONLY) | Some(libc::O_RDWR),
                 Some(libc::O_WRONLY) | Some(libc::O_RDWR),
             ) => {
+                // Optimization: Try converting it to a fifo by using /dev/fd
+                //
+                // On linux, opening `/dev/fd/$fd` returns a fd with a new file description,
+                // so we can set `O_NONBLOCK` on it without affecting other processes.
+                //
+                // On macOS, opening `/dev/fd/$fd` seems to be the same as `File::try_clone`.
+                //
+                // I tested this on macOS 14 and Linux 6.5.13
+                #[cfg(target_os = "linux")]
+                if let Some(jobserver) =
+                    Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
+                {
+                    return Some(jobserver);
+                }
+
                 let read = read.try_clone().ok()?;
                 let write = write.try_clone().ok()?;
 
@@ -199,12 +214,12 @@ impl Client {
 
     pub fn acquire(&self) -> io::Result<Acquired> {
         loop {
-            poll_for_readiness1(self.read.as_raw_fd())?;
-
-            // Ignore EINTR or EAGAIN and keep trying if that happens
+            // Ignore EAGAIN and keep trying if that happens
             if let Some(token) = self.acquire_allow_interrupts()? {
                 return Ok(token);
             }
+
+            poll_for_readiness1(self.read.as_raw_fd())?;
         }
     }
 
@@ -212,17 +227,27 @@ impl Client {
     /// if we're interrupted with EINTR or EAGAIN.
     fn acquire_allow_interrupts(&self) -> io::Result<Option<Acquired>> {
         let mut buf = [0];
-        match (&self.read).read(&mut buf) {
-            Ok(1) => Ok(Some(Acquired { byte: buf[0] })),
-            Ok(_) => Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
-            Err(e)
-                if e.kind() == io::ErrorKind::Interrupted
-                    || e.kind() == io::ErrorKind::WouldBlock =>
-            {
-                Ok(None)
+        loop {
+            match (&self.read).read(&mut buf) {
+                Ok(1) => break Ok(Some(Acquired { byte: buf[0] })),
+                Ok(_) => break Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+
+                // Interrupted by signal, try again
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => break Ok(None),
+
+                Err(e) => break Err(e),
             }
-            Err(e) => Err(e),
         }
+    }
+
+    /// `set_nonblocking` must be called prior to this call
+    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
+        self.acquire_allow_interrupts()
+    }
+
+    pub fn get_read_fd(&self) -> RawFd {
+        self.read.as_raw_fd()
     }
 
     pub fn release(&self, data: Option<&Acquired>) -> io::Result<()> {
@@ -282,6 +307,20 @@ impl Client {
         cvt(unsafe { libc::ioctl(self.read.as_raw_fd(), libc::FIONREAD, len.as_mut_ptr()) })?;
         Ok(unsafe { len.assume_init() }.try_into().unwrap())
     }
+
+    pub fn is_try_acquire_safe(&self) -> bool {
+        self.path.is_some()
+    }
+
+    pub fn set_nonblocking(&self) -> io::Result<()> {
+        set_nonblocking(self.read.as_raw_fd())?;
+        set_nonblocking(self.write.as_raw_fd())
+    }
+
+    pub fn set_blocking(&self) -> io::Result<()> {
+        set_blocking(self.read.as_raw_fd())?;
+        set_blocking(self.write.as_raw_fd())
+    }
 }
 
 impl Drop for Client {
@@ -334,7 +373,6 @@ fn set_cloexec(fd: c_int, set: bool) -> io::Result<()> {
     Ok(())
 }
 
-/*
 fn set_fd_flags(fd: c_int, flags: c_int) -> io::Result<()> {
     // Safety: F_SETFL takes one and exactly one c_int flags.
     cvt(unsafe { libc::fcntl(fd, libc::F_SETFL, flags) })?;
@@ -348,7 +386,7 @@ fn set_nonblocking(fd: c_int) -> io::Result<()> {
 
 fn set_blocking(fd: c_int) -> io::Result<()> {
     set_fd_flags(fd, 0)
-    }*/
+}
 
 fn cvt(t: c_int) -> io::Result<c_int> {
     if t == -1 {

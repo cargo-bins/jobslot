@@ -26,3 +26,20 @@ jobs:
           cargo +nightly -Zminimal-versions update
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-features
+
+  msrv-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain add 1.58 --no-self-update --target wasm32-wasi
+          rustup toolchain add nightly --no-self-update
+          rustup default 1.58
+      - name: Use minimal version and create Cargo.lock
+        run: |
+          ./avoid-dev-deps.sh
+          cargo +nightly -Zminimal-versions update
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --target wasm32-wasi

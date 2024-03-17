@@ -119,7 +119,12 @@
 // the `docsrs` configuration attribute is defined
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{env, ffi, io, process, sync::Arc};
+use std::{
+    env,
+    error::Error as StdError,
+    ffi, fmt, io, ops, process,
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
+};
 
 use cfg_if::cfg_if;
 use scopeguard::{guard, ScopeGuard};
@@ -136,6 +141,11 @@ cfg_if! {
         mod imp;
     }
 }
+
+#[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
+mod async_client;
+#[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
+pub use async_client::AsyncAcquireClient;
 
 /// Command that can be accepted by this crate.
 pub trait Command {
@@ -252,6 +262,22 @@ where
     })
 }
 
+#[derive(Debug)]
+struct ClientInner {
+    inner: imp::Client,
+    #[cfg(unix)]
+    acitve_try_acquire_client_count: Mutex<usize>,
+}
+
+impl ClientInner {
+    #[cfg(unix)]
+    fn acitve_try_acquire_client_count(&self) -> MutexGuard<'_, usize> {
+        self.acitve_try_acquire_client_count
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 /// A client of a jobserver
 ///
 /// This structure is the main type exposed by this library, and is where
@@ -266,9 +292,7 @@ where
 /// Note that a `Client` implements the `Clone` trait, and all instances of a
 /// `Client` refer to the same jobserver instance.
 #[derive(Clone, Debug)]
-pub struct Client {
-    inner: Arc<imp::Client>,
-}
+pub struct Client(Arc<ClientInner>);
 
 impl Client {
     /// Creates a new jobserver initialized with the given parallelism limit.
@@ -313,10 +337,12 @@ impl Client {
         }
     }
 
-    fn new_inner(client: imp::Client) -> Self {
-        Self {
-            inner: Arc::new(client),
-        }
+    fn new_inner(inner: imp::Client) -> Self {
+        Self(Arc::new(ClientInner {
+            inner,
+            #[cfg(unix)]
+            acitve_try_acquire_client_count: Mutex::default(),
+        }))
     }
 
     /// Attempts to connect to the jobserver specified in this process's
@@ -393,7 +419,7 @@ impl Client {
                     .last()?,
             )
         }
-        .map(|c| Client { inner: Arc::new(c) })
+        .map(Self::new_inner)
     }
 
     /// Acquires a token from this jobserver client.
@@ -413,7 +439,7 @@ impl Client {
     /// return immediately with the error. If an error is returned then a token
     /// was not acquired.
     pub fn acquire(&self) -> io::Result<Acquired> {
-        let data = self.inner.acquire()?;
+        let data = self.0.inner.acquire()?;
         Ok(Acquired::new(self, data))
     }
 
@@ -427,7 +453,7 @@ impl Client {
     ///
     /// Underlying errors from the ioctl will be passed up.
     pub fn available(&self) -> io::Result<usize> {
-        self.inner.available()
+        self.0.inner.available()
     }
 
     /// Configures a child process to have access to this client's jobserver as
@@ -480,9 +506,9 @@ impl Client {
     {
         // Register one-time callback on unix to unset CLO_EXEC
         // in child process.
-        self.inner.pre_run(&mut cmd);
+        self.0.inner.pre_run(&mut cmd);
 
-        let arg = self.inner.string_arg();
+        let arg = self.0.inner.string_arg();
         // Older implementations of make use `--jobserver-fds` and newer
         // implementations use `--jobserver-auth`, pass both to try to catch
         // both implementations.
@@ -542,7 +568,7 @@ impl Client {
     {
         #[cfg(unix)]
         {
-            if let Some(path) = self.inner.get_fifo() {
+            if let Some(path) = self.0.inner.get_fifo() {
                 let path = path.as_os_str();
 
                 let prefix = "-j --jobserver-auth=";
@@ -566,7 +592,7 @@ impl Client {
     /// helper. If successful the process will need to guarantee that
     /// `release_raw` is called in the future.
     pub fn acquire_raw(&self) -> io::Result<()> {
-        self.inner.acquire()?;
+        self.0.inner.acquire()?;
         Ok(())
     }
 
@@ -576,8 +602,43 @@ impl Client {
     /// in some situations it could also be called to relinquish a process's
     /// implicit token temporarily which is then re-acquired later.
     pub fn release_raw(&self) -> io::Result<()> {
-        self.inner.release(None)?;
+        self.0.inner.release(None)?;
         Ok(())
+    }
+
+    /// Get [`TryAcquireClient`], which supports non-blocking acquire.
+    ///
+    /// It would return `Err(IntoTryAcquireClientError::IncompatibleWithOlderMake)`
+    /// on unix if an annoymous pipe is used as jobserver.
+    ///
+    /// Once this function is called, on unix, `O_NONBLOCK` will bes et on jobserver
+    /// until the last instance of [`TryAcquireClient`] is dropped.
+    pub fn into_try_acquire_client(self) -> Result<TryAcquireClient, IntoTryAcquireClientError> {
+        #[cfg(unix)]
+        return {
+            // Construct `TryAcquireClient` here, in case `set_nonblocking`
+            // failed, its dtor would set it back to blocking.
+            let client = TryAcquireClient(self);
+
+            {
+                let mut active_try_acquire_client_count =
+                    client.0 .0.acitve_try_acquire_client_count();
+                *active_try_acquire_client_count += 1;
+
+                if *active_try_acquire_client_count == 1 {
+                    client.0 .0.inner.set_nonblocking()?;
+                }
+            }
+
+            if client.0 .0.inner.is_try_acquire_safe() {
+                Ok(client)
+            } else {
+                Err(IntoTryAcquireClientError::IncompatibleWithOlderMake(client))
+            }
+        };
+
+        #[cfg(not(unix))]
+        return Ok(TryAcquireClient(self));
     }
 }
 
@@ -587,14 +648,14 @@ impl Client {
 /// otherwise represents the ability to spawn off another thread of work.
 #[derive(Debug)]
 pub struct Acquired {
-    client: Option<Arc<imp::Client>>,
+    client: Option<Arc<ClientInner>>,
     data: imp::Acquired,
 }
 
 impl Acquired {
     fn new(client: &Client, data: imp::Acquired) -> Self {
         Self {
-            client: Some(client.inner.clone()),
+            client: Some(client.0.clone()),
             data,
         }
     }
@@ -614,7 +675,128 @@ impl Acquired {
 impl Drop for Acquired {
     fn drop(&mut self) {
         if let Some(client) = self.client.take() {
-            drop(client.release(Some(&self.data)));
+            drop(client.inner.release(Some(&self.data)));
         }
+    }
+}
+
+/// Possible errors for [`Client::into_try_acquire_client`]
+#[derive(Debug)]
+pub enum IntoTryAcquireClientError {
+    /// The jobserver uses annoymous pipe, [`TryAcquireClient::try_acquire`]
+    /// requires setting `O_NONBLOCK`, since annoymous pipe is passed by fd,
+    /// it will affect all processes using the annoymous pipe,
+    /// which will break make < `4.4`.
+    ///
+    /// If you know that no make < `4.4` is spawned when [`TryAcquireClient`],
+    /// then you can simply unwrap this error and continue.
+    #[cfg(unix)]
+    IncompatibleWithOlderMake(TryAcquireClient),
+
+    /// Setting `O_NONBLOCK` failed.
+    #[cfg(unix)]
+    IoError(io::Error),
+}
+
+impl fmt::Display for IntoTryAcquireClientError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(unix)]
+            Self::IncompatibleWithOlderMake(_) => f.write_str(
+                r#"The jobserver uses annoymous pipe, `TryAcquireClient` will set `O_NONBLOCK`,
+since annoymous pipe is passed by fd, it will affect all processes using the annoymous pipe,
+which will break make < `4.4`."#,
+            ),
+
+            #[cfg(unix)]
+            Self::IoError(io_error) => write!(f, "io error: {}", io_error),
+
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl From<io::Error> for IntoTryAcquireClientError {
+    fn from(io_error: io::Error) -> Self {
+        Self::IoError(io_error)
+    }
+}
+
+impl StdError for IntoTryAcquireClientError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            #[cfg(unix)]
+            Self::IoError(io_error) => Some(io_error),
+            _ => None,
+        }
+    }
+}
+
+/// Extension of [`Client`] that supports non-blocking acquire.
+#[derive(Debug, derive_destructure2::destructure)]
+pub struct TryAcquireClient(Client);
+
+impl ops::Deref for TryAcquireClient {
+    type Target = Client;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryAcquireClient {
+    /// Similar to [`Client::acquire`], but returns `Ok(None)`
+    /// instead of bocking, if there is no token available.
+    pub fn try_acquire(&self) -> io::Result<Option<Acquired>> {
+        match self.0 .0.inner.try_acquire() {
+            Ok(Some(data)) => Ok(Some(Acquired::new(&self.0, data))),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Similar to [`Client::acquire_raw`], but returns `Ok(None)`
+    /// instead of blocking, if there is no token available.
+    pub fn try_acquire_raw(&self) -> io::Result<Option<()>> {
+        match self.0 .0.inner.try_acquire() {
+            Ok(Some(_)) => Ok(Some(())),
+            Ok(None) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    #[cfg(unix)]
+    fn cleanup(&self) -> io::Result<()> {
+        let mut active_try_acquire_client_count = self.0 .0.acitve_try_acquire_client_count();
+        *active_try_acquire_client_count -= 1;
+
+        if *active_try_acquire_client_count == 0 {
+            self.0 .0.inner.set_blocking()?;
+        }
+
+        Ok(())
+    }
+
+    /// Get back to [`Client`], return `Err` if clearing `O_NONBLOCK` fails.
+    pub fn into_inner(self) -> io::Result<Client> {
+        #[cfg(unix)]
+        self.cleanup()?;
+
+        Ok(self.destructure().0)
+    }
+}
+
+impl Drop for TryAcquireClient {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        let _ = self.cleanup();
+    }
+}
+
+#[cfg(unix)]
+impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.0 .0.inner.get_read_fd()
     }
 }

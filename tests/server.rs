@@ -7,21 +7,56 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use jobslot::Client;
+#[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
+use jobslot::AsyncAcquireClient;
+use jobslot::{Client, IntoTryAcquireClientError, TryAcquireClient};
 
-#[test]
-fn server_smoke() {
+fn get_try_acquire_client(client: Client) -> TryAcquireClient {
+    match client.into_try_acquire_client() {
+        Ok(client) => client,
+        #[cfg(unix)]
+        Err(IntoTryAcquireClientError::IncompatibleWithOlderMake(client)) => client,
+        res => res.unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn server_smoke() {
     let c = Client::new(1).unwrap();
     drop(c.acquire().unwrap());
     drop(c.acquire().unwrap());
+
+    let client = get_try_acquire_client(c);
+    client.try_acquire().unwrap().unwrap();
+    client.try_acquire().unwrap().unwrap();
+
+    #[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
+    {
+        let client = AsyncAcquireClient::new(client).unwrap();
+        client.acquire().await.unwrap();
+        client.acquire_owned().await.unwrap();
+    }
 }
 
-#[test]
-fn server_multiple() {
+#[tokio::test]
+async fn server_multiple() {
     let c = Client::new(2).unwrap();
     let a = c.acquire().unwrap();
     let b = c.acquire().unwrap();
     drop((a, b));
+
+    let client = get_try_acquire_client(c);
+    let a = client.try_acquire().unwrap().unwrap();
+    let b = client.try_acquire().unwrap().unwrap();
+    drop((a, b));
+
+    #[cfg(any(all(feature = "tokio", unix), not(any(unix, windows))))]
+    {
+        let client = AsyncAcquireClient::new(client).unwrap();
+        let a = client.acquire().await.unwrap();
+        let b = client.acquire().await.unwrap();
+        drop((a, b))
+    }
 }
 
 #[test]
@@ -165,13 +200,19 @@ fn zero_client() {
     let client = Client::new(0).unwrap();
     let (tx, rx) = mpsc::channel();
 
-    let handle = thread::spawn(move || {
-        for _ in 0..1000 {
-            tx.send(client.acquire()).unwrap();
+    let handle = thread::spawn({
+        let client = client.clone();
+        move || {
+            for _ in 0..1000 {
+                tx.send(client.acquire()).unwrap();
+            }
         }
     });
 
+    let client = get_try_acquire_client(client);
+
     for _ in 0..1000 {
+        assert!(client.try_acquire().unwrap().is_none());
         assert!(rx.try_recv().is_err());
     }
 
