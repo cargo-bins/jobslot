@@ -691,7 +691,7 @@ impl StdError for IntoTryAcquireClientError {
 }
 
 /// Extension of [`Client`] that supports non-blocking acquire.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_destructure2::destructure)]
 pub struct TryAcquireClient(Client);
 
 impl ops::Deref for TryAcquireClient {
@@ -721,6 +721,13 @@ impl TryAcquireClient {
             Ok(None) => Ok(None),
             Err(err) => Err(err),
         }
+    }
+
+    /// Get back to [`Client`], return `Err` if clearing `O_NONBLOCK` fails.
+    pub fn into_inner(self) -> io::Result<Client> {
+        let client = self.destructure().0;
+        client.inner.set_blocking()?;
+        Ok(client)
     }
 }
 

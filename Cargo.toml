@@ -31,6 +31,7 @@ tokio = { version = "1", default-features = false, features = [
     "process",
 ], optional = true }
 scopeguard = "1.1.0"
+derive_destructure2 = "0.1.2"
 
 [target.'cfg(any(unix, windows))'.dependencies]
 # Features:
