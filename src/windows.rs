@@ -148,7 +148,10 @@ impl Client {
             )),
             ret => Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Unexpected return value `{ret:#01x}` from WaitForSingleObject"),
+                format!(
+                    "Unexpected return value `{:#01x}` from WaitForSingleObject",
+                    ret
+                ),
             )),
         }
     }
