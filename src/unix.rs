@@ -191,17 +191,17 @@ impl Client {
                 // I tested this on macOS 14 and Linux 6.5.13
                 #[cfg(target_os = "linux")]
                 if let (Ok(read), Ok(write)) = (
-                    File::open(format!("/dev/fd/{}", read)),
-                    OpenOptions::new()
+                    File::open(format!("/dev/fd/{}", read.as_raw_fd())),
+                    fs::OpenOptions::new()
                         .write(true)
-                        .open(format!("/dev/fd/{}", write)),
+                        .open(format!("/dev/fd/{}", write.as_raw_fd())),
                 ) {
-                    return Ok(Some(Client {
+                    return Some(Client {
                         read,
                         write,
                         creation_arg,
                         owns_fifo: false,
-                    }));
+                    });
                 }
                 if let Some(jobserver) =
                     Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
