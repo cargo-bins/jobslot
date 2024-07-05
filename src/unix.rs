@@ -16,13 +16,18 @@ use libc::c_int;
 use crate::Command;
 
 #[derive(Debug)]
+enum ClientCreationArg {
+    Fds { read: c_int, write: c_int },
+    Fifo(Box<Path>),
+}
+
+#[derive(Debug)]
 pub struct Client {
     /// This fd is set to be nonblocking
     read: File,
     /// This fd is set to be blocking
     write: File,
-    /// Path to the named fifo if any
-    path: Option<Box<Path>>,
+    creation_arg: ClientCreationArg,
     /// If the Client owns the fifo, then we should remove it on drop.
     owns_fifo: bool,
 }
@@ -78,7 +83,7 @@ impl Client {
                     let client = Self {
                         read: file.try_clone()?,
                         write: file,
-                        path: Some(name.into_boxed_path()),
+                        creation_arg: ClientCreationArg::Fifo(name.into_boxed_path()),
                         owns_fifo: true,
                     };
 
@@ -131,13 +136,13 @@ impl Client {
 
     /// `--jobserver-auth=fifo:PATH`
     fn from_fifo(path: &Path) -> Option<Self> {
-        let file = open_file_rw(path).ok()?;
+        let read = open_file_rw(path).ok()?;
 
-        if is_pipe(&file)? {
+        if is_pipe(&read)? {
             Some(Self {
-                read: file.try_clone().ok()?,
-                write: file,
-                path: Some(path.into()),
+                read,
+                write: open_file_rw(path).ok()?,
+                creation_arg: ClientCreationArg::Fifo(path.into()),
                 owns_fifo: false,
             })
         } else {
@@ -151,6 +156,8 @@ impl Client {
 
         let read = read.parse().ok()?;
         let write = write.parse().ok()?;
+
+        let creation_arg = ClientCreationArg::Fds { read, write };
 
         let read = ManuallyDrop::new(File::from_raw_fd(read));
         let write = ManuallyDrop::new(File::from_raw_fd(write));
@@ -183,6 +190,19 @@ impl Client {
                 //
                 // I tested this on macOS 14 and Linux 6.5.13
                 #[cfg(target_os = "linux")]
+                if let (Ok(read), Ok(write)) = (
+                    File::open(format!("/dev/fd/{}", read)),
+                    OpenOptions::new()
+                        .write(true)
+                        .open(format!("/dev/fd/{}", write)),
+                ) {
+                    return Ok(Some(Client {
+                        read,
+                        write,
+                        creation_arg,
+                        owns_fifo: false,
+                    }));
+                }
                 if let Some(jobserver) =
                     Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
                 {
@@ -195,7 +215,7 @@ impl Client {
                 Some(Self {
                     read,
                     write,
-                    path: None,
+                    creation_arg,
                     owns_fifo: false,
                 })
             }
@@ -207,7 +227,7 @@ impl Client {
         Self {
             read: File::from_raw_fd(read),
             write: File::from_raw_fd(write),
-            path: None,
+            creation_arg: ClientCreationArg::Fds { read, write },
             owns_fifo: false,
         }
     }
@@ -268,15 +288,18 @@ impl Client {
     }
 
     pub fn string_arg(&self) -> Cow<'_, str> {
-        Cow::Owned(format!(
-            "{},{}",
-            self.read.as_raw_fd(),
-            self.write.as_raw_fd()
-        ))
+        Cow::Owned(match &self.creation_arg {
+            ClientCreationArg::Fifo(path) => format!("fifo:{}", path.display()),
+            ClientCreationArg::Fds { read, write } => format!("{},{}", read, write),
+        })
     }
 
     pub fn get_fifo(&self) -> Option<&Path> {
-        self.path.as_deref()
+        if let ClientCreationArg::Fifo(path) = &self.creation_arg {
+            Some(path)
+        } else {
+            None
+        }
     }
 
     pub fn pre_run<Cmd>(&self, cmd: &mut Cmd)
@@ -309,7 +332,7 @@ impl Client {
     }
 
     pub fn is_try_acquire_safe(&self) -> bool {
-        self.path.is_some()
+        self.get_fifo().is_some()
     }
 
     pub fn set_nonblocking(&self) -> io::Result<()> {
@@ -325,7 +348,7 @@ impl Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        if let Some(path) = &self.path {
+        if let Some(path) = self.get_fifo() {
             if self.owns_fifo {
                 fs::remove_file(path).ok();
             }
