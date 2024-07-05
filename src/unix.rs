@@ -13,6 +13,8 @@ use std::{
 use getrandom::getrandom;
 use libc::c_int;
 
+use crate::Command;
+
 #[derive(Debug)]
 enum ClientCreationArg {
     Fds { read: c_int, write: c_int },
