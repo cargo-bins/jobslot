@@ -297,29 +297,6 @@ impl Client {
         }
     }
 
-    pub fn pre_run<Cmd>(&self, cmd: &mut Cmd)
-    where
-        Cmd: Command,
-    {
-        let read = self.read.as_raw_fd();
-        let write = self.write.as_raw_fd();
-
-        let mut fds = Some([read, write]);
-
-        let f = move || {
-            // Make sure this function is executed only once,
-            // so that the command may be reused with another
-            // Client.
-            for fd in fds.take().iter().flatten() {
-                set_cloexec(*fd, false)?;
-            }
-
-            Ok(())
-        };
-
-        unsafe { cmd.pre_exec(f) };
-    }
-
     pub fn available(&self) -> io::Result<usize> {
         let mut len = MaybeUninit::<c_int>::uninit();
         cvt(unsafe { libc::ioctl(self.read.as_raw_fd(), libc::FIONREAD, len.as_mut_ptr()) })?;

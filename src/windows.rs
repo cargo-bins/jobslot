@@ -176,14 +176,6 @@ impl Client {
         Cow::Borrowed(&self.name)
     }
 
-    pub fn pre_run<Cmd>(&self, _cmd: &mut Cmd)
-    where
-        Cmd: Command,
-    {
-        // nothing to do here, we gave the name of our semaphore to the
-        // child above
-    }
-
     pub fn available(&self) -> io::Result<usize> {
         // Can't read value of a semaphore on Windows, so
         // try to acquire without sleeping, since we can find out the

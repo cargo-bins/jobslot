@@ -98,13 +98,6 @@ impl Client {
         );
     }
 
-    pub fn pre_run<Cmd>(&self, _cmd: &mut Cmd) {
-        panic!(
-            "On this platform there is no cross process jobserver support,
-             so Client::configure_and_run is not supported."
-        );
-    }
-
     pub fn available(&self) -> io::Result<usize> {
         Ok(*self.count())
     }
