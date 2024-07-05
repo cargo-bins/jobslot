@@ -504,8 +504,7 @@ impl Client {
         Cmd: Command,
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
-        // Register one-time callback on unix to unset CLO_EXEC
-        // in child process.
+        #[cfg(unix)]
         self.0.inner.pre_run(&mut cmd);
 
         let arg = self.0.inner.string_arg();
