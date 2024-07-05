@@ -203,11 +203,6 @@ impl Client {
                         owns_fifo: false,
                     });
                 }
-                if let Some(jobserver) =
-                    Self::from_fifo(Path::new(&format!("/dev/fd/{}", read.as_raw_fd())))
-                {
-                    return Some(jobserver);
-                }
 
                 let read = read.try_clone().ok()?;
                 let write = write.try_clone().ok()?;
