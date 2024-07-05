@@ -13,8 +13,6 @@ use std::{
 use getrandom::getrandom;
 use libc::c_int;
 
-use crate::Command;
-
 #[derive(Debug)]
 enum ClientCreationArg {
     Fds { read: c_int, write: c_int },
@@ -29,7 +27,7 @@ pub struct Client {
     write: File,
     creation_arg: ClientCreationArg,
     /// If the Client owns the fifo, then we should remove it on drop.
-    owns_fifo: bool,
+    owns: bool,
 }
 
 #[derive(Debug)]
@@ -84,7 +82,7 @@ impl Client {
                         read: file.try_clone()?,
                         write: file,
                         creation_arg: ClientCreationArg::Fifo(name.into_boxed_path()),
-                        owns_fifo: true,
+                        owns: true,
                     };
 
                     client.init(limit)?;
@@ -143,7 +141,7 @@ impl Client {
                 read,
                 write: open_file_rw(path).ok()?,
                 creation_arg: ClientCreationArg::Fifo(path.into()),
-                owns_fifo: false,
+                owns: false,
             })
         } else {
             None
@@ -200,7 +198,7 @@ impl Client {
                         read,
                         write,
                         creation_arg,
-                        owns_fifo: false,
+                        owns: false,
                     });
                 }
 
@@ -211,7 +209,7 @@ impl Client {
                     read,
                     write,
                     creation_arg,
-                    owns_fifo: false,
+                    owns: false,
                 })
             }
             _ => None,
@@ -223,7 +221,7 @@ impl Client {
             read: File::from_raw_fd(read),
             write: File::from_raw_fd(write),
             creation_arg: ClientCreationArg::Fds { read, write },
-            owns_fifo: false,
+            owns: false,
         }
     }
 
@@ -297,6 +295,33 @@ impl Client {
         }
     }
 
+    pub fn pre_run<Cmd>(&self, cmd: &mut Cmd)
+    where
+        Cmd: Command,
+    {
+        if !self.owns || self.get_fifo().is_some() {
+            return;
+        }
+
+        let read = self.read.as_raw_fd();
+        let write = self.write.as_raw_fd();
+
+        let mut fds = Some([read, write]);
+
+        let f = move || {
+            // Make sure this function is executed only once,
+            // so that the command may be reused with another
+            // Client.
+            for fd in fds.take().iter().flatten() {
+                set_cloexec(*fd, false)?;
+            }
+
+            Ok(())
+        };
+
+        unsafe { cmd.pre_exec(f) };
+    }
+
     pub fn available(&self) -> io::Result<usize> {
         let mut len = MaybeUninit::<c_int>::uninit();
         cvt(unsafe { libc::ioctl(self.read.as_raw_fd(), libc::FIONREAD, len.as_mut_ptr()) })?;
@@ -321,7 +346,7 @@ impl Client {
 impl Drop for Client {
     fn drop(&mut self) {
         if let Some(path) = self.get_fifo() {
-            if self.owns_fifo {
+            if self.owns {
                 fs::remove_file(path).ok();
             }
         }

@@ -504,6 +504,7 @@ impl Client {
         Cmd: Command,
         F: FnOnce(&mut Cmd) -> io::Result<R>,
     {
+        #[cfg(unix)]
         let arg = self.0.inner.string_arg();
         // Older implementations of make use `--jobserver-fds` and newer
         // implementations use `--jobserver-auth`, pass both to try to catch
