@@ -42,7 +42,8 @@ impl Client {
         // Create nonblocking and cloexec pipes
         let pipes = create_pipe()?;
 
-        let client = unsafe { Self::from_fds(pipes[0], pipes[1]) };
+        let mut client = unsafe { Self::from_fds(pipes[0], pipes[1]) };
+        client.owns = true;
 
         client.init(limit)?;
 
