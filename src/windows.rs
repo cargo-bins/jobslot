@@ -1,6 +1,13 @@
 use std::{
-    borrow::Cow, convert::TryInto, ffi::CString, fmt::Write, io, mem::MaybeUninit,
-    num::NonZeroIsize, ptr,
+    borrow::Cow,
+    convert::TryInto,
+    ffi::CString,
+    fmt::Write,
+    io,
+    mem::MaybeUninit,
+    num::NonZeroIsize,
+    os::windows::io::{AsRawHandle, HandleOrNull, OwnedHandle},
+    ptr,
 };
 
 use getrandom::getrandom;
@@ -24,7 +31,7 @@ type LONG = i32;
 
 #[derive(Debug)]
 pub struct Client {
-    sem: Handle,
+    sem: OwnedHandle,
     name: Box<str>,
 }
 
@@ -63,14 +70,16 @@ impl Client {
 
             write!(&mut name, "{}\0", u128::from_ne_bytes(bytes)).unwrap();
 
-            let res = unsafe {
-                Handle::new_or_err(CreateSemaphoreA(
+            let res: io::Result<OwnedHandle> = unsafe {
+                HandleOrNull::from_raw_handle(CreateSemaphoreA(
                     ptr::null_mut(),
                     create_limit,
                     create_limit,
                     name.as_ptr(),
                 ))
-            };
+            }
+            .try_into()
+            .map_err(|_| io::Error::last_os_error());
 
             match res {
                 Ok(sem) => {
@@ -102,16 +111,16 @@ impl Client {
     }
 
     pub unsafe fn open(var: &[u8]) -> Option<Client> {
-        let name = String::from_utf8_lossy(var);
-
-        let sem = OpenSemaphoreA(
+        HandleOrNull::from_raw_handle(OpenSemaphoreA(
             SYNCHRONIZE | SEMAPHORE_MODIFY_STATE,
             FALSE,
             CString::new(var).ok()?.as_bytes().as_ptr(),
-        );
-        Handle::new(sem).map(|sem| Client {
+        ))
+        .try_into()
+        .ok()
+        .map(|sem| Client {
             sem,
-            name: name.into(),
+            name: String::from_utf8_lossy(var).into(),
         })
     }
 
@@ -188,35 +197,6 @@ impl Client {
             Ok(prev + 1)
         } else {
             Ok(0)
-        }
-    }
-}
-
-#[derive(Debug)]
-#[repr(transparent)]
-struct Handle(NonZeroIsize);
-
-impl Handle {
-    unsafe fn new(handle: RawHandle) -> Option<Self> {
-        NonZeroIsize::new(handle).map(Self)
-    }
-
-    unsafe fn new_or_err(handle: RawHandle) -> Result<Self, io::Error> {
-        Self::new(handle).ok_or_else(io::Error::last_os_error)
-    }
-
-    fn as_raw_handle(&self) -> RawHandle {
-        self.0.get()
-    }
-}
-
-unsafe impl Sync for Handle {}
-unsafe impl Send for Handle {}
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        unsafe {
-            CloseHandle(self.as_raw_handle());
         }
     }
 }
