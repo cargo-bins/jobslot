@@ -38,7 +38,7 @@ derive_destructure2 = "0.1.2"
 # Features:
 #  - std: Implement std-only traits for getrandom::Error
 #  - rdrand: Enable fallback RDRAND-based implementation on x86/x86_64
-getrandom = { version = "0.2.7", features = ["std", "rdrand"] }
+getrandom = { version = "0.3.0", features = ["std", "rdrand"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.132"
