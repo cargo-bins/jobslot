@@ -710,6 +710,7 @@ which will break make < `4.4`."#,
             #[cfg(unix)]
             Self::IoError(io_error) => write!(f, "io error: {}", io_error),
 
+            #[cfg(not(unix))]
             _ => unreachable!(),
         }
     }
@@ -797,5 +798,28 @@ impl Drop for TryAcquireClient {
 impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
         self.0 .0.inner.get_read_fd()
+    }
+}
+
+#[cfg(any(unix, windows))]
+trait GenRandom {
+    fn new_random() -> io::Result<Self>
+    where
+        Self: Sized;
+}
+
+#[cfg(any(unix, windows))]
+impl GenRandom for u128 {
+    fn new_random() -> io::Result<Self> {
+        use std::mem::{transmute_copy, MaybeUninit};
+
+        const UNINIT_BYTE: MaybeUninit<u8> = MaybeUninit::<u8>::uninit();
+        let mut uninit_bytes = [UNINIT_BYTE; 16];
+
+        getrandom::fill_uninit(&mut uninit_bytes)?;
+
+        Ok(u128::from_ne_bytes(unsafe {
+            transmute_copy(&uninit_bytes)
+        }))
     }
 }
