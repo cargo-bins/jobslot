@@ -64,7 +64,7 @@ impl Client {
         name.push_str(prefix);
 
         for _ in 0..100 {
-            write!(&mut name, "{}\0", u128::new_random()).unwrap();
+            write!(&mut name, "{}\0", u128::new_random()?).unwrap();
 
             let res: io::Result<OwnedHandle> = unsafe {
                 HandleOrNull::from_raw_handle(CreateSemaphoreA(
