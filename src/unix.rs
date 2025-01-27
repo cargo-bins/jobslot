@@ -10,10 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use getrandom::getrandom;
+use getrandom::fill_uninit as getrandom_uninit;
 use libc::c_int;
 
-use crate::Command;
+use crate::{Command, GenRandom};
 
 #[derive(Debug)]
 enum ClientCreationArg {
@@ -65,10 +65,7 @@ impl Client {
         name.push_str(prefix);
 
         for _ in 0..100 {
-            let mut bytes = [0; 16];
-            getrandom(&mut bytes)?;
-
-            write!(&mut name, "{:x}\0", u128::from_ne_bytes(bytes)).unwrap();
+            write!(&mut name, "{:x}\0", u128::new_random()).unwrap();
 
             let res = cvt(unsafe {
                 libc::mkfifo(name.as_ptr() as *const _, libc::S_IRUSR | libc::S_IWUSR)
