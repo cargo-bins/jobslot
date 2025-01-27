@@ -800,12 +800,12 @@ impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
     }
 }
 
-#[cfg(any(unix, windows)]
+#[cfg(any(unix, windows))]
 trait GenRandom {
     fn new_random() -> io::Result<Self>;
 }
 
-#[cfg(any(unix, windows)]
+#[cfg(any(unix, windows))]
 impl GenRandom for u128 {
     fn new_random() -> io::Result<Self> {
         const UNINIT_BYTE: MaybeUninit<u8> = MaybeUninit::<u8>::uninit();
