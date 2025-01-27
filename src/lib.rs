@@ -709,6 +709,9 @@ which will break make < `4.4`."#,
 
             #[cfg(unix)]
             Self::IoError(io_error) => write!(f, "io error: {}", io_error),
+
+            #[cfg(not(unix))]
+            _ => unreachable!(),
         }
     }
 }
