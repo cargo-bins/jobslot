@@ -10,7 +10,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use getrandom::fill_uninit as getrandom_uninit;
 use libc::c_int;
 
 use crate::{Command, GenRandom};
