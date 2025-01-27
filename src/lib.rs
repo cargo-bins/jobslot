@@ -815,6 +815,6 @@ impl GenRandom for u128 {
             
         getrandom::fill_uninit(&mut uninit_bytes)?;
 
-        Ok(u128::from_ne_bytes(transmute_copy(uninit_bytes)))
+        Ok(u128::from_ne_bytes(unsafe { transmute_copy(&uninit_bytes) }))
     }
 }
