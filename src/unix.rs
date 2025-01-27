@@ -65,7 +65,7 @@ impl Client {
         name.push_str(prefix);
 
         for _ in 0..100 {
-            write!(&mut name, "{:x}\0", u128::new_random()).unwrap();
+            write!(&mut name, "{:x}\0", u128::new_random()?).unwrap();
 
             let res = cvt(unsafe {
                 libc::mkfifo(name.as_ptr() as *const _, libc::S_IRUSR | libc::S_IWUSR)
