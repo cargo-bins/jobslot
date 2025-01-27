@@ -799,3 +799,19 @@ impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
         self.0 .0.inner.get_read_fd()
     }
 }
+
+#[cfg(any(unix, windows)]
+trait GenRandom {
+    fn new_random() -> io::Result<Self>;
+}
+
+impl GenRandom for u128 {
+    fn new_random() -> io::Result<Self> {
+        const UNINIT_BYTE: MaybeUninit<u8> = MaybeUninit::<u8>::uninit();
+        let mut uninit_bytes = [UNINIT_BYTE; 16];
+            
+        getrandom::fill_uninit(&mut uninit_bytes)?;
+
+        Ok(u128::from_ne_bytes(std::mem::transmute_copy(uninit_bytes)))
+    }
+}
