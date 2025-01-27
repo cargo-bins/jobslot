@@ -10,7 +10,6 @@ use std::{
     ptr,
 };
 
-use getrandom::getrandom;
 use windows_sys::Win32::{
     Foundation::{
         CloseHandle, ERROR_ALREADY_EXISTS, FALSE, HANDLE as RawHandle, WAIT_ABANDONED, WAIT_FAILED,
@@ -25,7 +24,7 @@ use windows_sys::Win32::{
     },
 };
 
-use crate::Command;
+use crate::{Command, GenRandom};
 
 type LONG = i32;
 
@@ -65,10 +64,7 @@ impl Client {
         name.push_str(prefix);
 
         for _ in 0..100 {
-            let mut bytes = [0; 16];
-            getrandom(&mut bytes)?;
-
-            write!(&mut name, "{}\0", u128::from_ne_bytes(bytes)).unwrap();
+            write!(&mut name, "{}\0", u128::new_random()).unwrap();
 
             let res: io::Result<OwnedHandle> = unsafe {
                 HandleOrNull::from_raw_handle(CreateSemaphoreA(
