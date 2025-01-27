@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20](https://github.com/cargo-bins/jobslot/compare/v0.2.19...v0.2.20) - 2025-01-27
+
+### Other
+
+- Update getrandom requirement from 0.2.7 to 0.3.0 ([#78](https://github.com/cargo-bins/jobslot/pull/78))
+- Fix wasm testing (#79)
+
 ## [0.2.19](https://github.com/cargo-bins/jobslot/compare/v0.2.18...v0.2.19) - 2024-07-31
 
 ### Other
