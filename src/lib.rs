@@ -802,7 +802,8 @@ impl std::os::unix::prelude::AsRawFd for TryAcquireClient {
 
 #[cfg(any(unix, windows))]
 trait GenRandom {
-    fn new_random() -> io::Result<Self>;
+    fn new_random() -> io::Result<Self>
+    where Self: Sized;
 }
 
 #[cfg(any(unix, windows))]
