@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21](https://github.com/cargo-bins/jobslot/compare/v0.2.20...v0.2.21) - 2025-06-12
+
+### Other
+
+- Update windows-sys requirement from 0.59.0 to 0.60.1 ([#81](https://github.com/cargo-bins/jobslot/pull/81))
+
 ## [0.2.20](https://github.com/cargo-bins/jobslot/compare/v0.2.19...v0.2.20) - 2025-01-27
 
 ### Other
