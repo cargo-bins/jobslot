@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.22](https://github.com/cargo-bins/jobslot/compare/v0.2.21...v0.2.22) - 2025-06-21
+
+### Fixed
+
+- insert `fifo:` in `--jobserver-auth=fifo:/PATH` ([#83](https://github.com/cargo-bins/jobslot/pull/83))
+
 ## [0.2.21](https://github.com/cargo-bins/jobslot/compare/v0.2.20...v0.2.21) - 2025-06-12
 
 ### Other
