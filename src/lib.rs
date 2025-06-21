@@ -570,7 +570,7 @@ impl Client {
             if let Some(path) = self.0.inner.get_fifo() {
                 let path = path.as_os_str();
 
-                let prefix = "-j --jobserver-auth=";
+                let prefix = "-j --jobserver-auth=fifo:";
 
                 let mut value = ffi::OsString::with_capacity(prefix.len() + path.len());
                 value.push(prefix);
