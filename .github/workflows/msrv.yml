@@ -16,7 +16,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust
         run: |
           rustup toolchain add $MSRV nightly --no-self-update
@@ -31,7 +31,7 @@ jobs:
   msrv-wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         run: |
