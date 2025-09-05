@@ -3,7 +3,7 @@ on: [push, pull_request]
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-  MSRV: 1.63
+  MSRV: 1.71
 
 jobs:
   test:
