@@ -1,4 +1,20 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.23](https://github.com/cargo-bins/jobslot/compare/v0.2.22...v0.2.23) - 2025-09-05
+
+### Other
+
+- Update windows-sys requirement from 0.60.1 to 0.61.0 ([#88](https://github.com/cargo-bins/jobslot/pull/88))
+- Bump msrv to 1.71 ([#89](https://github.com/cargo-bins/jobslot/pull/89))
+- Bump actions/checkout from 4 to 5 ([#85](https://github.com/cargo-bins/jobslot/pull/85))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
