@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.24](https://github.com/cargo-bins/jobslot/compare/v0.2.23...v0.2.24) - 2025-11-21
+
+### Other
+
+- Bump actions/checkout from 5 to 6 ([#90](https://github.com/cargo-bins/jobslot/pull/90))
+
 ## [0.2.22](https://github.com/cargo-bins/jobslot/compare/v0.2.21...v0.2.22) - 2025-06-21
 
 ### Fixed
