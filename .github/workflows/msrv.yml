@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain add $MSRV --no-self-update --target wasm32-wasi
+          rustup toolchain add $MSRV --no-self-update --target wasm32-wasip1
           rustup toolchain add nightly --no-self-update
           rustup default $MSRV
       - name: Use minimal version and create Cargo.lock
