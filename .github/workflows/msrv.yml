@@ -3,7 +3,7 @@ on: [push, pull_request]
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-  MSRV: 1.71
+  MSRV: 1.85
 
 jobs:
   test:
@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain add $MSRV --no-self-update --target wasm32-wasi
+          rustup toolchain add $MSRV --no-self-update --target wasm32-wasip1
           rustup toolchain add nightly --no-self-update
           rustup default $MSRV
       - name: Use minimal version and create Cargo.lock
@@ -43,4 +43,4 @@ jobs:
           ./avoid-dev-deps.sh
           cargo +nightly -Zminimal-versions update
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --target wasm32-wasi
+      - run: cargo check --target wasm32-wasip1
