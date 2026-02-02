@@ -37,7 +37,7 @@ derive_destructure2 = "0.1.2"
 [target.'cfg(any(unix, windows))'.dependencies]
 # Features:
 #  - std: Implement std-only traits for getrandom::Error
-getrandom = { version = "0.3.0", features = ["std"] }
+getrandom = { version = "0.4.0", features = ["std"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.132"
