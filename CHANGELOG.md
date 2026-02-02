@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.24](https://github.com/cargo-bins/jobslot/compare/v0.2.23...v0.2.24) - 2026-02-02
+
+### Other
+
+- Update getrandom requirement from 0.3.0 to 0.4.0 ([#94](https://github.com/cargo-bins/jobslot/pull/94))
+- Bump msrv to 1.85 ([#95](https://github.com/cargo-bins/jobslot/pull/95))
+- Bump actions/cache from 4 to 5 ([#92](https://github.com/cargo-bins/jobslot/pull/92))
+- Bump actions/checkout from 5 to 6 ([#90](https://github.com/cargo-bins/jobslot/pull/90))
+
 ## [0.2.22](https://github.com/cargo-bins/jobslot/compare/v0.2.21...v0.2.22) - 2025-06-21
 
 ### Fixed
