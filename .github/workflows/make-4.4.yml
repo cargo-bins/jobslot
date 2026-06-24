@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Cache make compiled
         id: cache-make
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /usr/local/bin/make
           key: ${{ matrix.os }}-make-${{ env.MAKE_VERSION }}
