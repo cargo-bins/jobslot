@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.25](https://github.com/cargo-bins/jobslot/compare/v0.2.24...v0.2.25) - 2026-06-24
+
+### Other
+
+- Bump actions/cache from 5 to 6 ([#101](https://github.com/cargo-bins/jobslot/pull/101))
+- Bump actions/checkout from 6 to 7 ([#99](https://github.com/cargo-bins/jobslot/pull/99))
+- Fix CHANGELOG.md format
+
 ## [0.2.24](https://github.com/cargo-bins/jobslot/compare/v0.2.23...v0.2.24) - 2026-02-02
 
 ### Other

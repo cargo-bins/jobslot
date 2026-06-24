@@ -1,6 +1,6 @@
 [package]
 name = "jobslot"
-version = "0.2.24"
+version = "0.2.25"
 authors = [
     "Jiahao XU <Jiahao_XU@outlook.com>",
     "Alex Crichton <alex@alexcrichton.com>",
